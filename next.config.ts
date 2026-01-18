@@ -1,7 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  // Отключаем все индикаторы разработки
+const nextConfig: NextConfig = {  // Disable dev indicators
   devIndicators: false,
   
   // Игнорируем ошибки от расширений браузера в dev режиме
