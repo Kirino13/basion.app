@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   title: 'Basion.app - Tap to Earn on Base',
   description: 'Tap-to-earn game on Base Network. Buy taps, earn points, climb the leaderboard!',
   icons: {
-    icon: '/favicon.ico',
+    icon: '/favicon.png',
   },
 };
 
