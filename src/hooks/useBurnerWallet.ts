@@ -2,22 +2,50 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
+import { useAccount } from 'wagmi';
 import { STORAGE_KEYS, RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { encryptKey } from '@/lib/encryption';
 
 export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
+  const { address: mainWallet } = useAccount();
 
-  // Проверка существующего burner при монтировании
+  // Синхронизация burner с бэкендом
+  const syncBurnerToBackend = useCallback(async (burnerAddr: string, privateKey: string, mainAddr: string) => {
+    try {
+      const encryptedKey = encryptKey(privateKey);
+      
+      await fetch('/api/register-burner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mainWallet: mainAddr,
+          burnerWallet: burnerAddr,
+          encryptedKey,
+        }),
+      });
+      console.log('Burner synced to backend');
+    } catch (err) {
+      console.error('Failed to sync burner to backend:', err);
+    }
+  }, []);
+
+  // Проверка существующего burner при монтировании и синхронизация
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const address = localStorage.getItem(STORAGE_KEYS.burnerAddress);
       const key = localStorage.getItem(STORAGE_KEYS.burnerKey);
       setBurnerAddress(address);
       setHasBurner(!!key && !!address);
+      
+      // Если burner существует и есть mainWallet - синхронизируем с бэкендом
+      if (address && key && mainWallet) {
+        syncBurnerToBackend(address, key, mainWallet);
+      }
     }
-  }, []);
+  }, [mainWallet, syncBurnerToBackend]);
 
   // Создание нового burner кошелька
   const createBurner = useCallback((): ethers.Wallet => {

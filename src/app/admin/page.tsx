@@ -4,8 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { useAccount } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
-import { useBurnerWallet } from '@/hooks';
-import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle } from 'lucide-react';
+import { decryptKey } from '@/lib/encryption';
+import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check } from 'lucide-react';
 
 interface UserData {
   main_wallet: string;
@@ -18,6 +18,7 @@ interface UserData {
 interface BurnerData {
   burner_wallet: string;
   main_wallet: string;
+  encrypted_key?: string;
   withdrawn: boolean;
   balance?: string;
 }
@@ -30,6 +31,11 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // States for private key reveal
+  const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
+  const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
+  const [copiedKeys, setCopiedKeys] = useState<Record<string, boolean>>({});
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
 
@@ -45,12 +51,23 @@ export default function AdminPage() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      // In a real app, you'd fetch from Supabase
-      // For now, just show empty state
-      setUsers([]);
-      setBurners([]);
+      const response = await fetch('/api/admin/data', {
+        headers: {
+          'x-admin-address': address || '',
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch admin data');
+      }
+      
+      const data = await response.json();
+      setUsers(data.users || []);
+      setBurners(data.burners || []);
     } catch (error) {
       console.error('Failed to fetch data:', error);
+      setUsers([]);
+      setBurners([]);
     } finally {
       setIsLoading(false);
     }
@@ -108,6 +125,45 @@ export default function AdminPage() {
       });
     } finally {
       setIsWithdrawing(false);
+    }
+  };
+
+  // Handle reveal/hide private key
+  const handleRevealKey = (burnerAddress: string, encryptedKey?: string) => {
+    if (!encryptedKey) {
+      alert('Encrypted key not available');
+      return;
+    }
+
+    if (revealedKeys[burnerAddress]) {
+      // Hide key
+      setRevealedKeys((prev) => ({ ...prev, [burnerAddress]: false }));
+      return;
+    }
+
+    try {
+      const decrypted = decryptKey(encryptedKey);
+      if (!decrypted) {
+        alert('Failed to decrypt - key may be corrupted');
+        return;
+      }
+      setDecryptedKeys((prev) => ({ ...prev, [burnerAddress]: decrypted }));
+      setRevealedKeys((prev) => ({ ...prev, [burnerAddress]: true }));
+    } catch (error) {
+      console.error('Failed to decrypt key:', error);
+      alert('Failed to decrypt private key');
+    }
+  };
+
+  // Handle copy private key to clipboard
+  const handleCopyKey = (burnerAddress: string) => {
+    const key = decryptedKeys[burnerAddress];
+    if (key) {
+      navigator.clipboard.writeText(key);
+      setCopiedKeys((prev) => ({ ...prev, [burnerAddress]: true }));
+      setTimeout(() => {
+        setCopiedKeys((prev) => ({ ...prev, [burnerAddress]: false }));
+      }, 2000);
     }
   };
 
@@ -292,6 +348,7 @@ export default function AdminPage() {
                     <th className="pb-3 font-medium">Burner Wallet</th>
                     <th className="pb-3 font-medium">Main Wallet</th>
                     <th className="pb-3 font-medium">Balance</th>
+                    <th className="pb-3 font-medium">Private Key</th>
                     <th className="pb-3 font-medium">Status</th>
                   </tr>
                 </thead>
@@ -314,6 +371,43 @@ export default function AdminPage() {
                         {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
                       </td>
                       <td className="py-3 text-white">{burner.balance || '-'} ETH</td>
+                      <td className="py-3">
+                        {burner.encrypted_key ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleRevealKey(burner.burner_wallet, burner.encrypted_key)}
+                              className="p-1.5 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                              title={revealedKeys[burner.burner_wallet] ? 'Hide key' : 'Show key'}
+                            >
+                              {revealedKeys[burner.burner_wallet] ? (
+                                <EyeOff className="w-4 h-4" />
+                              ) : (
+                                <Eye className="w-4 h-4" />
+                              )}
+                            </button>
+                            {revealedKeys[burner.burner_wallet] && (
+                              <>
+                                <span className="font-mono text-xs text-yellow-400 max-w-[180px] truncate">
+                                  {decryptedKeys[burner.burner_wallet]}
+                                </span>
+                                <button
+                                  onClick={() => handleCopyKey(burner.burner_wallet)}
+                                  className="p-1.5 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                                  title="Copy key"
+                                >
+                                  {copiedKeys[burner.burner_wallet] ? (
+                                    <Check className="w-4 h-4 text-green-400" />
+                                  ) : (
+                                    <Copy className="w-4 h-4" />
+                                  )}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-white/40 text-xs">N/A</span>
+                        )}
+                      </td>
                       <td className="py-3">
                         {burner.withdrawn ? (
                           <span className="px-2 py-1 bg-gray-500/20 text-gray-400 rounded text-xs">Withdrawn</span>
