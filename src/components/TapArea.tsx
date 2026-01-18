@@ -18,12 +18,39 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
 
   const { hasBurner, sendTap } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
-  const { tapBalance, isConnected, refetchGameStats } = useBasionContract();
+  const { tapBalance, points, totalTaps, isConnected, address, refetchGameStats } = useBasionContract();
 
   // Синхронизация локального состояния с контрактом
   useEffect(() => {
     setLocalTaps(tapBalance);
   }, [tapBalance]);
+
+  // Синхронизация очков с Supabase при загрузке (один раз)
+  const [hasSynced, setHasSynced] = useState(false);
+  
+  useEffect(() => {
+    // Синхронизируем только один раз при загрузке, если есть адрес и данные загружены
+    if (address && !hasSynced && tapBalance >= 0) {
+      const timer = setTimeout(async () => {
+        try {
+          await fetch('/api/sync-user', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mainWallet: address,
+              points: points,
+              totalTaps: totalTaps,
+              tapBalance: tapBalance,
+            }),
+          });
+          setHasSynced(true);
+        } catch (syncError) {
+          console.error('Failed to sync user stats on load:', syncError);
+        }
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [address, hasSynced, points, totalTaps, tapBalance]);
 
   // Автоочистка ошибки через 3 секунды
   useEffect(() => {
@@ -102,9 +129,34 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         // Отправляем транзакцию тапа через burner кошелек
         await sendTap();
 
-        // Обновляем состояние с контракта через 2 секунды
-        setTimeout(() => {
-          refetchGameStats();
+        // Обновляем состояние с контракта через 2 секунды и синхронизируем с Supabase
+        setTimeout(async () => {
+          const result = await refetchGameStats();
+          
+          // Синхронизируем очки с Supabase используя актуальные данные
+          if (address && result.data) {
+            const data = result.data as [bigint, bigint, bigint, string];
+            const syncData = {
+              mainWallet: address,
+              points: Number(data[1]),      // points - второй элемент
+              totalTaps: Number(data[2]),   // totalTaps - третий элемент  
+              tapBalance: Number(data[0]),  // tapBalance - первый элемент
+            };
+            console.log('Syncing user data to Supabase:', syncData);
+            try {
+              const response = await fetch('/api/sync-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(syncData),
+              });
+              const responseData = await response.json();
+              console.log('Sync response:', responseData);
+            } catch (syncError) {
+              console.error('Failed to sync user stats:', syncError);
+            }
+          } else {
+            console.log('Skipping sync - no address or data:', { address, hasData: !!result.data });
+          }
         }, 2000);
       } catch (err) {
         console.error('Tap error:', err);
@@ -129,7 +181,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         completeTap();
       }
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit]
+    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, address]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0;
