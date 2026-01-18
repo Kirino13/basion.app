@@ -138,11 +138,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
     try {
       setStep('creating-burner');
 
-      // Проверяем есть ли уже burner, если да - используем его
-      let burner = getBurner();
-      if (!burner) {
-        burner = createBurner();
-      }
+      // Check if burner exists, if yes - use it
+      // Types: getBurner() -> Wallet | null, createBurner() -> HDNodeWallet
+      const existingBurner = getBurner();
+      const burner = existingBurner || createBurner();
       setNewBurnerAddress(burner.address);
 
       // Вычисляем 70% для перевода на burner

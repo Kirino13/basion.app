@@ -62,15 +62,16 @@ export function useBurnerWallet() {
     }
   }, [mainWallet, syncBurnerToBackend]);
 
-  // Создание нового burner кошелька
-  const createBurner = useCallback((): ethers.Wallet => {
+  // Create new burner wallet
+  // Returns HDNodeWallet (ethers v6: createRandom returns HDNodeWallet)
+  const createBurner = useCallback((): ethers.HDNodeWallet => {
     if (typeof window === 'undefined') {
       throw new Error('Cannot create burner wallet on server');
     }
 
     const wallet = ethers.Wallet.createRandom();
 
-    // Сохраняем в localStorage
+    // Save to localStorage
     localStorage.setItem(STORAGE_KEYS.burnerKey, wallet.privateKey);
     localStorage.setItem(STORAGE_KEYS.burnerAddress, wallet.address);
 
