@@ -82,7 +82,7 @@ function HomeContent() {
             )}
 
             {/* Bottom Action Area */}
-            <div className="w-full flex flex-col px-2 mt-8">
+            <div className="w-full flex flex-col px-2 mt-16">
               <div className="w-full flex flex-row items-center justify-center gap-2">
                 {/* Deposit Button */}
                 <button
