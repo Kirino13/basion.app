@@ -135,7 +135,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0;
 
   return (
-    <div className="flex flex-col items-center gap-8 w-full max-w-xl">
+    <div className="flex flex-col items-center gap-6 w-full max-w-xl">
       {/* Анимированные пузырьки */}
       {bubbles.map((b) => (
         <FloatingBubble key={b.id} data={b} onComplete={removeBubble} />
@@ -147,22 +147,18 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         <p className="text-white/70 text-sm">Тапов осталось</p>
       </div>
 
-      {/* Квадратная кнопка TAP */}
+      {/* Квадратная кнопка TAP - весь белый блок кликабелен */}
       <motion.div
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
         onClick={handleTap}
         onTouchStart={handleTap}
-        className={`relative group ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative w-64 h-64 lg:w-72 lg:h-72 bg-white rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Внешний белый квадрат - жирная рамка */}
-        <div className="w-72 h-72 lg:w-80 lg:h-80 rounded-[40px] bg-white shadow-xl flex items-center justify-center select-none p-5">
-          {/* Внутренний синий квадрат */}
-          <div 
-            className="w-full h-full rounded-[24px]"
-            style={{ backgroundColor: '#0000FF' }}
-          />
-        </div>
+        {/* Синий квадрат внутри */}
+        <div 
+          className="absolute inset-[70px] bg-[#0000FF] rounded-[16px] pointer-events-none"
+        />
       </motion.div>
 
       {/* Сообщение об ошибке */}

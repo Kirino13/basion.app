@@ -66,20 +66,17 @@ function HomeContent() {
       <div className="relative z-10 w-full min-h-screen flex flex-col lg:flex-row">
         {/* LEFT ZONE (65%): The Game */}
         <div className="flex-[6.5] relative flex flex-col items-center justify-center p-6">
-          <div className="flex flex-col items-center gap-16 w-full max-w-xl mb-12">
+          <div className="flex flex-col items-center gap-6 w-full max-w-xl mb-12">
             {/* The Main Tap Area */}
             {isConnected ? (
               <TapArea onOpenDeposit={() => setIsDepositOpen(true)} />
             ) : (
-              <div className="flex flex-col items-center gap-8">
-                {/* Placeholder - двойной квадрат с жирной белой рамкой */}
-                <div className="w-72 h-72 lg:w-80 lg:h-80 rounded-[40px] bg-white/60 shadow-xl flex items-center justify-center p-5">
-                  <div 
-                    className="w-full h-full rounded-[24px] flex items-center justify-center"
-                    style={{ backgroundColor: 'rgba(0, 0, 255, 0.5)' }}
-                  >
-                    <span className="text-white/80 text-lg font-bold">Connect to Play</span>
-                  </div>
+              <div className="flex flex-col items-center gap-6">
+                {/* Placeholder - весь белый блок видим */}
+                <div className="relative w-64 h-64 lg:w-72 lg:h-72 bg-white/60 rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] flex items-center justify-center">
+                  {/* Синий квадрат внутри */}
+                  <div className="absolute inset-[70px] bg-[rgba(0,0,255,0.5)] rounded-[16px]" />
+                  <span className="text-white/80 text-lg font-bold relative z-10">Connect to Play</span>
                 </div>
               </div>
             )}
