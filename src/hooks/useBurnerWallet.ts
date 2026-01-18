@@ -7,7 +7,7 @@ import { STORAGE_KEYS, RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 import { encryptKey } from '@/lib/encryption';
 
-// Кэшированный provider - создаётся один раз
+// Cached provider - created once
 let cachedProvider: ethers.JsonRpcProvider | null = null;
 function getProvider(): ethers.JsonRpcProvider {
   if (!cachedProvider) {
@@ -16,7 +16,7 @@ function getProvider(): ethers.JsonRpcProvider {
   return cachedProvider;
 }
 
-// Флаг для предотвращения двойной синхронизации
+// Flag to prevent double sync
 let hasSyncedBurner = false;
 
 export function useBurnerWallet() {
@@ -24,9 +24,9 @@ export function useBurnerWallet() {
   const [hasBurner, setHasBurner] = useState(false);
   const { address: mainWallet } = useAccount();
 
-  // Синхронизация burner с бэкендом (один раз за сессию)
+  // Sync burner with backend (once per session)
   const syncBurnerToBackend = useCallback(async (burnerAddr: string, privateKey: string, mainAddr: string) => {
-    if (hasSyncedBurner) return; // Предотвращаем повторную синхронизацию
+    if (hasSyncedBurner) return; // Prevent re-sync
     hasSyncedBurner = true;
     
     try {
@@ -42,12 +42,12 @@ export function useBurnerWallet() {
         }),
       });
     } catch (err) {
-      hasSyncedBurner = false; // Сбрасываем флаг при ошибке для retry
+      hasSyncedBurner = false; // Reset flag on error for retry
       console.error('Failed to sync burner to backend:', err);
     }
   }, []);
 
-  // Проверка существующего burner при монтировании и синхронизация
+  // Check existing burner on mount and sync
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const address = localStorage.getItem(STORAGE_KEYS.burnerAddress);
@@ -55,7 +55,7 @@ export function useBurnerWallet() {
       setBurnerAddress(address);
       setHasBurner(!!key && !!address);
       
-      // Если burner существует и есть mainWallet - синхронизируем с бэкендом
+      // If burner exists and mainWallet present - sync with backend
       if (address && key && mainWallet) {
         syncBurnerToBackend(address, key, mainWallet);
       }
@@ -81,7 +81,7 @@ export function useBurnerWallet() {
     return wallet;
   }, []);
 
-  // Получение существующего burner кошелька
+  // Get existing burner wallet
   const getBurner = useCallback((): ethers.Wallet | null => {
     if (typeof window === 'undefined') return null;
 
@@ -92,7 +92,7 @@ export function useBurnerWallet() {
       return new ethers.Wallet(privateKey);
     } catch (err) {
       console.error('Invalid burner key in localStorage:', err);
-      // Удаляем невалидный ключ
+      // Remove invalid key
       localStorage.removeItem(STORAGE_KEYS.burnerKey);
       localStorage.removeItem(STORAGE_KEYS.burnerAddress);
       setBurnerAddress(null);
@@ -101,13 +101,13 @@ export function useBurnerWallet() {
     }
   }, []);
 
-  // Получение адреса burner без загрузки полного кошелька
+  // Get burner address without loading full wallet
   const getBurnerAddress = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem(STORAGE_KEYS.burnerAddress);
   }, []);
 
-  // Очистка burner кошелька (при выходе/сбросе)
+  // Clear burner wallet (on logout/reset)
   const clearBurner = useCallback((): void => {
     if (typeof window === 'undefined') return;
 
@@ -118,7 +118,7 @@ export function useBurnerWallet() {
     setHasBurner(false);
   }, []);
 
-  // Отправка транзакции тапа через burner кошелек
+  // Send tap transaction via burner wallet
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burner = getBurner();
     if (!burner) {
@@ -127,10 +127,10 @@ export function useBurnerWallet() {
 
     const provider = getProvider();
     
-    // Проверяем баланс перед отправкой
+    // Check balance before sending
     const balance = await provider.getBalance(burner.address);
     const feeData = await provider.getFeeData();
-    const estimatedGas = 50000n; // Примерная оценка газа для tap()
+    const estimatedGas = 50000n; // Approximate gas estimate for tap()
     const gasCost = estimatedGas * (feeData.gasPrice || 0n);
     
     if (balance < gasCost) {
@@ -144,7 +144,7 @@ export function useBurnerWallet() {
     return tx;
   }, [getBurner]);
 
-  // Отправка нескольких тапов за раз
+  // Send multiple taps at once
   const sendTapMultiple = useCallback(
     async (count: number): Promise<ethers.TransactionResponse> => {
       if (count <= 0 || count > 100) {
@@ -158,10 +158,10 @@ export function useBurnerWallet() {
 
       const provider = getProvider();
       
-      // Проверяем баланс
+      // Check balance
       const balance = await provider.getBalance(burner.address);
       const feeData = await provider.getFeeData();
-      const estimatedGas = BigInt(50000 + count * 5000); // Больше газа для мультитапа
+      const estimatedGas = BigInt(50000 + count * 5000); // More gas for multi-tap
       const gasCost = estimatedGas * (feeData.gasPrice || 0n);
       
       if (balance < gasCost) {
@@ -177,7 +177,7 @@ export function useBurnerWallet() {
     [getBurner]
   );
 
-  // Получение баланса ETH на burner кошельке
+  // Get ETH balance on burner wallet
   const getBurnerBalance = useCallback(async (): Promise<string> => {
     const address = getBurnerAddress();
     if (!address) return '0';

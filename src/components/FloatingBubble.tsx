@@ -25,7 +25,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
-      {/* Основной пузырь */}
+      {/* Main bubble */}
       <motion.div
         className="relative flex items-center justify-center"
         initial={{ scale: 0.85 }}
@@ -41,7 +41,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
         }}
         onAnimationComplete={() => onComplete(data.id)}
       >
-        {/* Bubble container с градиентом и glow */}
+        {/* Bubble container with gradient and glow */}
         <div 
           className="relative w-12 h-12 rounded-full flex items-center justify-center"
           style={{
@@ -50,7 +50,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
             border: '2px solid rgba(255,255,255,0.9)',
           }}
         >
-          {/* Глянец сверху */}
+          {/* Top glare */}
           <div 
             className="absolute top-1 left-1/2 -translate-x-1/2 w-6 h-3 rounded-full"
             style={{
@@ -58,7 +58,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
             }}
           />
           
-          {/* Текст +1 */}
+          {/* +1 Text */}
           <span 
             className="relative z-10 font-black text-lg select-none"
             style={{
@@ -70,7 +70,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
           </span>
         </div>
 
-        {/* Энерго-частицы (трейл) */}
+        {/* Energy particles (trail) */}
         {particles.map((particle, i) => (
           <motion.div
             key={i}

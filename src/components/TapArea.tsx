@@ -17,7 +17,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
   
-  // Ref для debounced синхронизации
+  // Ref for debounced sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
 
@@ -25,12 +25,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
   const { canTap, recordTap, completeTap } = useTapThrottle();
   const { tapBalance, points, totalTaps, isConnected, address, refetchGameStats } = useBasionContract();
 
-  // Синхронизация локального состояния с контрактом
+  // Sync local state with contract
   useEffect(() => {
     setLocalTaps(tapBalance);
   }, [tapBalance]);
 
-  // Debounced синхронизация с Supabase (вызывается максимум раз в 5 сек)
+  // Debounced sync with Supabase (max once per 5 sec)
   const debouncedSync = useCallback(async () => {
     if (!address || pendingSyncRef.current) return;
     
@@ -58,7 +58,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
     }
   }, [address, refetchGameStats]);
 
-  // Запланировать синхронизацию (с debounce 5 сек)
+  // Schedule sync (with 5 sec debounce)
   const scheduleSync = useCallback(() => {
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
@@ -66,7 +66,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
     syncTimeoutRef.current = setTimeout(debouncedSync, 5000);
   }, [debouncedSync]);
 
-  // Синхронизация при загрузке страницы (один раз)
+  // Sync on page load (once)
   useEffect(() => {
     if (address && !hasSynced && tapBalance >= 0) {
       const timer = setTimeout(async () => {
@@ -90,7 +90,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
     }
   }, [address, hasSynced, points, totalTaps, tapBalance]);
 
-  // Очистка таймера при размонтировании
+  // Cleanup timer on unmount
   useEffect(() => {
     return () => {
       if (syncTimeoutRef.current) {
@@ -99,7 +99,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
     };
   }, []);
 
-  // Автоочистка ошибки через 3 секунды
+  // Auto-clear error after 3 seconds
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => setError(null), 3000);
@@ -113,40 +113,40 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
 
   const handleTap = useCallback(
     async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-      // Очищаем предыдущую ошибку
+      // Clear previous error
       setError(null);
 
-      // Проверка подключения
+      // Check connection
       if (!isConnected) {
-        setError('Подключите кошелек');
+        setError('Connect your wallet');
         return;
       }
 
-      // Проверка burner кошелька
+      // Check burner wallet
       if (!hasBurner) {
-        setError('Сначала пополните баланс');
+        setError('Please deposit first');
         onOpenDeposit();
         return;
       }
 
-      // Проверка баланса тапов
+      // Check tap balance
       if (localTaps <= 0) {
-        setError('Закончились тапы! Купите еще.');
+        setError('Out of taps! Buy more.');
         onOpenDeposit();
         return;
       }
 
-      // Проверка кулдауна
+      // Check cooldown
       if (!canTap()) {
-        return; // Молча игнорируем слишком быстрые тапы
+        return; // Silently ignore too fast taps
       }
 
-      // Проверка что не обрабатываем другой тап
+      // Check if processing another tap
       if (isProcessing) {
         return;
       }
 
-      // Получаем позицию клика
+      // Get click position
       let clientX: number, clientY: number;
       if ('touches' in e) {
         clientX = e.touches[0].clientX;
@@ -156,11 +156,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         clientY = e.clientY;
       }
 
-      // Начинаем тап
+      // Start tap
       setIsProcessing(true);
       recordTap();
 
-      // Создаем анимацию пузырька
+      // Create bubble animation
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
@@ -169,36 +169,36 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
       };
       setBubbles((prev) => [...prev, newBubble]);
 
-      // Оптимистичное обновление UI
+      // Optimistic UI update
       setLocalTaps((prev) => Math.max(0, prev - 1));
 
       try {
-        // Отправляем транзакцию тапа через burner кошелек
+        // Send tap transaction via burner wallet
         await sendTap();
 
-        // Обновляем состояние с контракта через 2 секунды
+        // Update state from contract after 2 seconds
         setTimeout(() => {
           refetchGameStats();
-          // Планируем синхронизацию с Supabase (debounced - раз в 5 сек максимум)
+          // Schedule Supabase sync (debounced - max once per 5 sec)
           scheduleSync();
         }, 2000);
       } catch (err) {
         console.error('Tap error:', err);
         
-        // Анализируем ошибку
-        const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
+        // Analyze error
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         
         if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
-          setError('Недостаточно ETH для газа на tap-кошельке');
+          setError('Insufficient ETH for gas on tap wallet');
         } else if (errorMessage.includes('No burner')) {
-          setError('Tap-кошелек не найден');
+          setError('Tap wallet not found');
         } else if (errorMessage.includes('nonce')) {
-          setError('Слишком много тапов. Подождите.');
+          setError('Too many taps. Please wait.');
         } else {
-          setError('Тап не прошел. Попробуйте снова.');
+          setError('Tap failed. Try again.');
         }
 
-        // Откатываем оптимистичное обновление
+        // Rollback optimistic update
         setLocalTaps((prev) => prev + 1);
       } finally {
         setIsProcessing(false);
@@ -212,18 +212,18 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
-      {/* Анимированные пузырьки */}
+      {/* Animated bubbles */}
       {bubbles.map((b) => (
         <FloatingBubble key={b.id} data={b} onComplete={removeBubble} />
       ))}
 
-      {/* Отображение тапов */}
+      {/* Taps display */}
       <div className="text-center">
         <p className="text-4xl font-bold text-white drop-shadow-md">{localTaps.toLocaleString().replace(/,/g, ' ')}</p>
-        <p className="text-white/70 text-sm">Тапов осталось</p>
+        <p className="text-white/70 text-sm">Taps remaining</p>
       </div>
 
-      {/* Квадратная кнопка TAP - весь белый блок кликабелен */}
+      {/* Square TAP button - entire white block is clickable */}
       <motion.div
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
@@ -231,13 +231,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         onTouchStart={handleTap}
         className={`relative w-64 h-64 lg:w-72 lg:h-72 bg-white rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Синий квадрат внутри */}
+        {/* Blue square inside */}
         <div 
           className="absolute inset-[70px] bg-[#0000FF] rounded-[16px] pointer-events-none"
         />
       </motion.div>
 
-      {/* Сообщение об ошибке */}
+      {/* Error message */}
       {error && (
         <motion.p 
           initial={{ opacity: 0, y: -10 }}

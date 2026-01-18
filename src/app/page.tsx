@@ -72,9 +72,9 @@ function HomeContent() {
               <TapArea onOpenDeposit={() => setIsDepositOpen(true)} />
             ) : (
               <div className="flex flex-col items-center gap-6">
-                {/* Placeholder - весь белый блок видим */}
+                {/* Placeholder - entire white block visible */}
                 <div className="relative w-64 h-64 lg:w-72 lg:h-72 bg-white/60 rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] flex items-center justify-center">
-                  {/* Синий квадрат внутри */}
+                  {/* Blue square inside */}
                   <div className="absolute inset-[70px] bg-[rgba(0,0,255,0.5)] rounded-[16px]" />
                   <span className="text-white/80 text-lg font-bold relative z-10">Connect to Play</span>
                 </div>

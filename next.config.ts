@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {  // Disable dev indicators
   devIndicators: false,
   
-  // Игнорируем ошибки от расширений браузера в dev режиме
+  // Ignore errors from browser extensions in dev mode
   onDemandEntries: {
     maxInactiveAge: 60 * 1000,
     pagesBufferLength: 5,

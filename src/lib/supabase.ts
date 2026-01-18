@@ -9,7 +9,7 @@ export const supabaseClient = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null;
 
-// Кэшированный admin клиент (для серверных API routes)
+// Cached admin client (for server API routes)
 let supabaseAdmin: SupabaseClient | null = null;
 
 export function getSupabaseAdmin(): SupabaseClient | null {
@@ -17,7 +17,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
     return null;
   }
   
-  // Используем кэшированный клиент
+  // Use cached client
   if (!supabaseAdmin) {
     supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
   }

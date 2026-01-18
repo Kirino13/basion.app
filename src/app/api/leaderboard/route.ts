@@ -8,16 +8,16 @@ export async function GET(request: Request) {
 
     const supabase = getSupabaseAdmin();
 
-    // Если Supabase не настроен - возвращаем пустой массив
+    // If Supabase not configured - return empty array
     if (!supabase) {
-      console.warn('Supabase не настроен. Leaderboard будет пустым.');
+      console.warn('Supabase not configured. Leaderboard will be empty.');
       return NextResponse.json([]);
     }
 
     const { data, error } = await supabase
       .from('users')
       .select('main_wallet, points')
-      .gt('points', 0) // Только пользователи с очками
+      .gt('points', 0) // Only users with points
       .order('points', { ascending: false })
       .limit(limit);
 
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // Форматируем ответ с рангами
+    // Format response with ranks
     const leaderboard = (data || []).map((user, index) => ({
       rank: index + 1,
       wallet: user.main_wallet,
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     return NextResponse.json(leaderboard);
   } catch (error) {
     console.error('Leaderboard error:', error);
-    // Возвращаем пустой массив при ошибке
+    // Return empty array on error
     return NextResponse.json([], { status: 200 });
   }
 }

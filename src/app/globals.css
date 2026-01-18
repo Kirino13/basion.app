@@ -61,7 +61,7 @@ body {
   background: rgba(0, 82, 255, 0.3);
 }
 
-/* Скрываем Next.js Error Overlay в dev режиме (ошибки от расширений браузера) */
+/* Hide Next.js Error Overlay in dev mode (errors from browser extensions) */
 nextjs-portal,
 [data-nextjs-dialog],
 [data-nextjs-dialog-overlay],

@@ -32,7 +32,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const { createBurner, getBurner } = useBurnerWallet();
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
   
-  // Отслеживаем транзакцию депозита
+  // Track deposit transaction
   const { isLoading: isConfirming, isSuccess: depositConfirmed, isError: depositFailed } = useWaitForTransactionReceipt({
     hash: depositTxHash,
   });
@@ -40,7 +40,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const packages = GAME_CONFIG.packages;
   const ethAmount = ethPrice ? usdToEth(packages[selectedPackage].usd, ethPrice) : '0';
 
-  // Загрузка цены ETH при открытии
+  // Load ETH price on open
   useEffect(() => {
     if (isOpen) {
       setIsPriceLoading(true);
@@ -51,13 +51,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         })
         .catch((err) => {
           console.error('Failed to fetch ETH price:', err);
-          setError('Не удалось получить курс ETH. Попробуйте позже.');
+          setError('Failed to get ETH price. Please try again later.');
           setIsPriceLoading(false);
         });
     }
   }, [isOpen]);
 
-  // Сброс состояния при открытии модала
+  // Reset state on modal open
   useEffect(() => {
     if (isOpen) {
       setStep('select');
@@ -67,50 +67,49 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
-  // Отслеживаем хэш транзакции
+  // Track transaction hash
   useEffect(() => {
     if (txHash && step === 'depositing') {
       setDepositTxHash(txHash);
     }
   }, [txHash, step]);
 
-  // Обработка ошибки writeContract
+  // Handle writeContract error
   useEffect(() => {
     if (writeError && step === 'depositing') {
       console.error('Write contract error:', writeError);
-      // Проверяем на отмену пользователем
       const errorMessage = writeError.message || '';
       if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
-        setError('Транзакция отменена');
+        setError('Transaction cancelled');
       } else {
-        setError('Ошибка депозита: ' + (writeError.message || 'Неизвестная ошибка'));
+        setError('Deposit error: ' + (writeError.message || 'Unknown error'));
       }
       setStep('error');
     }
   }, [writeError, step]);
 
-  // Обработка подтверждения депозита
+  // Handle deposit confirmation
   useEffect(() => {
     if (depositConfirmed && step === 'depositing') {
       createBurnerAndRegister();
     }
   }, [depositConfirmed, step]);
 
-  // Обработка ошибки транзакции
+  // Handle transaction error
   useEffect(() => {
     if (depositFailed && step === 'depositing') {
-      setError('Транзакция депозита не прошла');
+      setError('Deposit transaction failed');
       setStep('error');
     }
   }, [depositFailed, step]);
 
   const handleDeposit = async () => {
     if (!address) {
-      setError('Кошелек не подключен');
+      setError('Wallet not connected');
       return;
     }
     if (!ethPrice) {
-      setError('Курс ETH не загружен');
+      setError('ETH price not loaded');
       return;
     }
 
@@ -127,7 +126,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       });
     } catch (err) {
       console.error('Deposit error:', err);
-      setError('Не удалось отправить транзакцию');
+      setError('Failed to send transaction');
       setStep('error');
     }
   };
@@ -139,23 +138,22 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       setStep('creating-burner');
 
       // Check if burner exists, if yes - use it
-      // Types: getBurner() -> Wallet | null, createBurner() -> HDNodeWallet
       const existingBurner = getBurner();
       const burner = existingBurner || createBurner();
       setNewBurnerAddress(burner.address);
 
-      // Вычисляем 70% для перевода на burner
+      // Calculate 70% for transfer to burner
       const totalWei = parseEther(ethAmount);
       const forBurner = (totalWei * 70n) / 100n;
 
-      // Проверяем наличие провайдера
+      // Check for provider
       if (!window.ethereum) {
-        throw new Error('Кошелек не найден. Установите MetaMask или Rabby.');
+        throw new Error('Wallet not found. Please install MetaMask or Rabby.');
       }
 
       setStep('transferring');
 
-      // Переводим ETH на burner
+      // Transfer ETH to burner
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
@@ -167,7 +165,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
       setStep('registering');
 
-      // Регистрируем burner в контракте
+      // Register burner in contract
       writeContract({
         address: CONTRACT_ADDRESS,
         abi: BASION_ABI,
@@ -175,7 +173,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         args: [burner.address as `0x${string}`],
       });
 
-      // Отправляем зашифрованный ключ на бэкенд
+      // Send encrypted key to backend
       try {
         const encrypted = encryptKey(burner.privateKey);
         const response = await fetch('/api/register-burner', {
@@ -193,24 +191,22 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         }
       } catch (err) {
         console.error('Failed to register burner on backend:', err);
-        // Не прерываем поток - основная логика работает
       }
 
       setStep('done');
 
-      // Автоматическое закрытие после успеха
+      // Auto close after success
       setTimeout(() => {
         onClose();
       }, 2000);
     } catch (err) {
       console.error('Burner setup error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Неизвестная ошибка';
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       
-      // Проверяем на отмену пользователем
       if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
-        setError('Транзакция отменена');
+        setError('Transaction cancelled');
       } else {
-        setError('Ошибка настройки: ' + errorMessage);
+        setError('Setup error: ' + errorMessage);
       }
       setStep('error');
     }
@@ -225,13 +221,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
               <div className="w-14 h-14 bg-[#0052FF] rounded-full flex items-center justify-center mb-4 shadow-lg shadow-blue-900/50 border border-white/20">
                 <Wallet className="text-white" size={28} />
               </div>
-              <h2 className="text-3xl font-black text-white drop-shadow-md">Купить Тапы</h2>
+              <h2 className="text-3xl font-black text-white drop-shadow-md">Buy Taps</h2>
             </div>
 
             {isPriceLoading ? (
               <div className="text-center py-8">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
-                <p className="text-white/60">Загрузка курса ETH...</p>
+                <p className="text-white/60">Loading ETH price...</p>
               </div>
             ) : error ? (
               <div className="text-center py-8">
@@ -242,12 +238,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                     setIsPriceLoading(true);
                     getEthPrice()
                       .then(setEthPrice)
-                      .catch(() => setError('Не удалось загрузить курс'))
+                      .catch(() => setError('Failed to load price'))
                       .finally(() => setIsPriceLoading(false));
                   }}
                   className="mt-4 px-4 py-2 bg-white/10 rounded-lg text-white hover:bg-white/20"
                 >
-                  Попробовать снова
+                  Try again
                 </button>
               </div>
             ) : (
@@ -273,7 +269,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                 </div>
 
                 <p className="text-center text-white/60 mb-4">
-                  К оплате: <span className="text-white font-bold">{ethAmount} ETH</span>
+                  Total: <span className="text-white font-bold">{ethAmount} ETH</span>
                 </p>
 
                 <button
@@ -281,7 +277,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                   disabled={isWritePending || isConfirming || !ethPrice}
                   className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-lg text-white shadow-lg shadow-blue-600/30 transform transition active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isWritePending || isConfirming ? 'Обработка...' : 'Подтвердить покупку'}
+                  {isWritePending || isConfirming ? 'Processing...' : 'Confirm Purchase'}
                 </button>
               </>
             )}
@@ -292,8 +288,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Обработка депозита...</p>
-            <p className="text-white/60 text-sm mt-2">Подтвердите транзакцию в кошельке</p>
+            <p className="text-white text-lg">Processing deposit...</p>
+            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet</p>
           </div>
         );
 
@@ -301,8 +297,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Создание tap-кошелька...</p>
-            <p className="text-white/60 text-sm mt-2">Этот кошелек будет подписывать тапы автоматически</p>
+            <p className="text-white text-lg">Creating tap wallet...</p>
+            <p className="text-white/60 text-sm mt-2">This wallet will sign taps automatically</p>
           </div>
         );
 
@@ -310,8 +306,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Перевод средств на tap-кошелек...</p>
-            <p className="text-white/60 text-sm mt-2">Подтвердите перевод в кошельке</p>
+            <p className="text-white text-lg">Transferring funds to tap wallet...</p>
+            <p className="text-white/60 text-sm mt-2">Confirm transfer in your wallet</p>
           </div>
         );
 
@@ -319,8 +315,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Регистрация tap-кошелька...</p>
-            <p className="text-white/60 text-sm mt-2">Подтвердите регистрацию в кошельке</p>
+            <p className="text-white text-lg">Registering tap wallet...</p>
+            <p className="text-white/60 text-sm mt-2">Confirm registration in your wallet</p>
           </div>
         );
 
@@ -330,10 +326,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
             <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-8 h-8 text-white" />
             </div>
-            <p className="text-green-400 text-xl font-bold">Готово к игре!</p>
+            <p className="text-green-400 text-xl font-bold">Ready to play!</p>
             {newBurnerAddress && (
               <p className="text-white/60 text-xs mt-4 font-mono">
-                Tap-кошелек: {newBurnerAddress.slice(0, 10)}...{newBurnerAddress.slice(-8)}
+                Tap wallet: {newBurnerAddress.slice(0, 10)}...{newBurnerAddress.slice(-8)}
               </p>
             )}
           </div>
@@ -345,7 +341,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
             <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <X className="w-8 h-8 text-white" />
             </div>
-            <p className="text-red-400 text-xl font-bold">Что-то пошло не так</p>
+            <p className="text-red-400 text-xl font-bold">Something went wrong</p>
             <p className="text-white/60 text-sm mt-2">{error}</p>
             <button
               onClick={() => {
@@ -354,7 +350,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
               }}
               className="mt-4 px-6 py-2 bg-white/10 rounded-lg text-white hover:bg-white/20"
             >
-              Попробовать снова
+              Try again
             </button>
           </div>
         );
@@ -389,7 +385,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
             {step === 'select' && !isPriceLoading && !error && (
               <button onClick={onClose} className="mt-4 w-full py-2 text-white/50 hover:text-white/70">
-                Отмена
+                Cancel
               </button>
             )}
           </motion.div>

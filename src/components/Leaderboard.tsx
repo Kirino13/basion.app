@@ -15,7 +15,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
 
   useEffect(() => {
     fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 30000); // Обновление каждые 30 сек
+    const interval = setInterval(fetchLeaderboard, 30000); // Update every 30 sec
     return () => clearInterval(interval);
   }, []);
 
@@ -32,7 +32,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
       setEntries(data);
     } catch (err) {
       console.error('Failed to fetch leaderboard:', err);
-      setError('Не удалось загрузить лидерборд');
+      setError('Failed to load leaderboard');
       setEntries([]);
     } finally {
       setIsLoading(false);
@@ -72,7 +72,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     return points.toLocaleString();
   };
 
-  // Состояние загрузки
+  // Loading state
   if (isLoading) {
     return (
       <div className="flex flex-col w-full h-full bg-gradient-to-b from-white/40 to-blue-50/20 backdrop-blur-2xl border border-cyan-400/30 rounded-3xl overflow-hidden shadow-lg ring-1 ring-white/60">
@@ -83,7 +83,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
           <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">Leaderboard</h3>
         </div>
         <div className="flex-1 flex items-center justify-center">
-          <div className="animate-pulse text-[#0B1B3A]/50">Загрузка...</div>
+          <div className="animate-pulse text-[#0B1B3A]/50">Loading...</div>
         </div>
       </div>
     );
@@ -101,7 +101,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* Список или пустое состояние */}
+      {/* List or empty state */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
@@ -110,14 +110,14 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
               onClick={fetchLeaderboard}
               className="mt-2 text-[#0052FF] text-sm hover:underline"
             >
-              Попробовать снова
+              Try again
             </button>
           </div>
         ) : entries.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <Users className="w-12 h-12 text-[#0B1B3A]/30 mb-3" />
-            <p className="text-[#0B1B3A]/50 text-sm">Пока нет игроков</p>
-            <p className="text-[#0B1B3A]/30 text-xs mt-1">Будь первым!</p>
+            <p className="text-[#0B1B3A]/50 text-sm">No players yet</p>
+            <p className="text-[#0B1B3A]/30 text-xs mt-1">Be the first!</p>
           </div>
         ) : (
           entries.map((item) => {
