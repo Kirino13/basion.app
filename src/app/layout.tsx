@@ -31,7 +31,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Скрываем Next.js dev overlay (ошибки от расширений браузера) */}
+        <link rel="icon" href="/favicon.png" type="image/png" />
+        <link rel="shortcut icon" href="/favicon.png" type="image/png" />
+        {/* Hide Next.js dev overlay */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
