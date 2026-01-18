@@ -10,11 +10,11 @@ interface FloatingBubbleProps {
 }
 
 const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => {
-  // Генерируем случайные смещения для частиц
+  // Random offsets for particles
   const particles = [
-    { delay: 0.05, x: -8, duration: 0.6 },
-    { delay: 0.1, x: 6, duration: 0.5 },
-    { delay: 0.15, x: -4, duration: 0.55 },
+    { delay: 0.1, x: -8, duration: 1.2 },
+    { delay: 0.2, x: 6, duration: 1.0 },
+    { delay: 0.3, x: -4, duration: 1.1 },
   ];
 
   return (
@@ -31,12 +31,12 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
         initial={{ scale: 0.85 }}
         animate={{ 
           scale: [0.85, 1.1, 1.0],
-          y: [0, -55],
+          y: [0, -80],
           opacity: [1, 1, 0]
         }}
         transition={{ 
-          duration: 0.9,
-          times: [0, 0.25, 1],
+          duration: 1.8,
+          times: [0, 0.15, 1],
           ease: 'easeOut'
         }}
         onAnimationComplete={() => onComplete(data.id)}
