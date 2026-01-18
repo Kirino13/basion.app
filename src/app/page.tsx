@@ -72,9 +72,14 @@ function HomeContent() {
               <TapArea onOpenDeposit={() => setIsDepositOpen(true)} />
             ) : (
               <div className="flex flex-col items-center gap-8">
-                {/* Placeholder Circle */}
-                <div className="w-64 h-64 lg:w-80 lg:h-80 rounded-full bg-gradient-to-br from-[#0052FF]/50 to-[#003ACC]/50 flex items-center justify-center shadow-2xl">
-                  <span className="text-white/70 text-2xl font-bold">Connect to Play</span>
+                {/* Placeholder - двойной квадрат с жирной белой рамкой */}
+                <div className="w-72 h-72 lg:w-80 lg:h-80 rounded-[40px] bg-white/60 shadow-xl flex items-center justify-center p-5">
+                  <div 
+                    className="w-full h-full rounded-[24px] flex items-center justify-center"
+                    style={{ backgroundColor: 'rgba(0, 0, 255, 0.5)' }}
+                  >
+                    <span className="text-white/80 text-lg font-bold">Connect to Play</span>
+                  </div>
                 </div>
               </div>
             )}

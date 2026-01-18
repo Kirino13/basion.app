@@ -12,20 +12,18 @@ interface TapAreaProps {
 
 const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
-  const [localPoints, setLocalPoints] = useState(0);
   const [localTaps, setLocalTaps] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const { hasBurner, sendTap, getBurnerBalance } = useBurnerWallet();
+  const { hasBurner, sendTap } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
-  const { tapBalance, points, isConnected, refetchGameStats } = useBasionContract();
+  const { tapBalance, isConnected, refetchGameStats } = useBasionContract();
 
   // Синхронизация локального состояния с контрактом
   useEffect(() => {
     setLocalTaps(tapBalance);
-    setLocalPoints(points);
-  }, [tapBalance, points]);
+  }, [tapBalance]);
 
   // Автоочистка ошибки через 3 секунды
   useEffect(() => {
@@ -99,7 +97,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
 
       // Оптимистичное обновление UI
       setLocalTaps((prev) => Math.max(0, prev - 1));
-      setLocalPoints((prev) => prev + 1);
 
       try {
         // Отправляем транзакцию тапа через burner кошелек
@@ -127,7 +124,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
 
         // Откатываем оптимистичное обновление
         setLocalTaps((prev) => prev + 1);
-        setLocalPoints((prev) => prev - 1);
       } finally {
         setIsProcessing(false);
         completeTap();
@@ -145,32 +141,27 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         <FloatingBubble key={b.id} data={b} onComplete={removeBubble} />
       ))}
 
-      {/* Отображение статистики */}
-      <div className="flex gap-8 text-center">
-        <div>
-          <p className="text-3xl font-bold text-white drop-shadow-md">{localTaps.toLocaleString()}</p>
-          <p className="text-white/70 text-sm">Тапов осталось</p>
-        </div>
-        <div>
-          <p className="text-3xl font-bold text-white drop-shadow-md">{localPoints.toLocaleString()}</p>
-          <p className="text-white/70 text-sm">Очков</p>
-        </div>
+      {/* Отображение тапов */}
+      <div className="text-center">
+        <p className="text-4xl font-bold text-white drop-shadow-md">{localTaps.toLocaleString().replace(/,/g, ' ')}</p>
+        <p className="text-white/70 text-sm">Тапов осталось</p>
       </div>
 
-      {/* Главный круг для тапов */}
+      {/* Квадратная кнопка TAP */}
       <motion.div
-        whileHover={{ scale: isDisabled ? 1 : 1.05 }}
+        whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
         onClick={handleTap}
         onTouchStart={handleTap}
-        className={`relative group ${isDisabled ? 'opacity-50 grayscale cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative group ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Свечение при наведении */}
-        <div className="absolute inset-0 bg-white/40 rounded-full blur-[60px] opacity-0 group-hover:opacity-100 transition-opacity duration-500 scale-110" />
-
-        {/* Круглая кнопка */}
-        <div className="w-64 h-64 lg:w-80 lg:h-80 rounded-full overflow-hidden shadow-2xl relative z-10 bg-gradient-to-br from-[#0052FF] to-[#003ACC] flex items-center justify-center">
-          <span className="text-white text-5xl lg:text-6xl font-black select-none">TAP</span>
+        {/* Внешний белый квадрат - жирная рамка */}
+        <div className="w-72 h-72 lg:w-80 lg:h-80 rounded-[40px] bg-white shadow-xl flex items-center justify-center select-none p-5">
+          {/* Внутренний синий квадрат */}
+          <div 
+            className="w-full h-full rounded-[24px]"
+            style={{ backgroundColor: '#0000FF' }}
+          />
         </div>
       </motion.div>
 
@@ -185,9 +176,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
           {error}
         </motion.p>
       )}
-
-      {/* Подсказка о кулдауне */}
-      <p className="text-white/50 text-xs">Максимум 2 тапа в секунду</p>
     </div>
   );
 };
