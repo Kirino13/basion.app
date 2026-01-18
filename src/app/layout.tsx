@@ -18,9 +18,6 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Basion.app - Tap to Earn on Base',
   description: 'Tap-to-earn game on Base Network. Buy taps, earn points, climb the leaderboard!',
-  icons: {
-    icon: '/favicon.png',
-  },
 };
 
 export default function RootLayout({
@@ -31,8 +28,6 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="icon" href="/favicon.png" type="image/png" />
-        <link rel="shortcut icon" href="/favicon.png" type="image/png" />
         {/* Hide Next.js dev overlay */}
         <script
           dangerouslySetInnerHTML={{
