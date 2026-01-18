@@ -10,8 +10,8 @@ export const GAME_CONFIG = {
     2: { usd: 10, taps: 20000 },
   },
   treasuryPercent: 30,
-  maxTapsPerSecond: 2,
-  tapCooldownMs: 500,
+  maxTapsPerSecond: 1,
+  tapCooldownMs: 1000,
   referral: {
     activationThreshold: 1000,
     bonusRate: 10,
