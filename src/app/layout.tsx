@@ -29,7 +29,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Скрываем Next.js dev overlay (ошибки от расширений браузера) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined') {
+                const hideOverlay = () => {
+                  const portal = document.querySelector('nextjs-portal');
+                  if (portal) portal.remove();
+                };
+                setInterval(hideOverlay, 100);
+                document.addEventListener('DOMContentLoaded', hideOverlay);
+              }
+            `,
+          }}
+        />
+      </head>
       <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased font-sans`}>
         <Providers>{children}</Providers>
       </body>

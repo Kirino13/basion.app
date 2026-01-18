@@ -60,3 +60,18 @@ body {
 ::selection {
   background: rgba(0, 82, 255, 0.3);
 }
+
+/* Скрываем Next.js Error Overlay в dev режиме (ошибки от расширений браузера) */
+nextjs-portal,
+[data-nextjs-dialog],
+[data-nextjs-dialog-overlay],
+[data-nextjs-toast],
+body > nextjs-portal,
+#__next-build-watcher,
+[data-nextjs-scroll],
+div[style*="position: fixed"][style*="bottom: 0"][style*="left: 0"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

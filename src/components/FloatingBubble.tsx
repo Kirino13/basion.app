@@ -10,18 +10,101 @@ interface FloatingBubbleProps {
 }
 
 const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => {
+  // Генерируем случайные смещения для частиц
+  const particles = [
+    { delay: 0.05, x: -8, duration: 0.6 },
+    { delay: 0.1, x: 6, duration: 0.5 },
+    { delay: 0.15, x: -4, duration: 0.55 },
+  ];
+
   return (
     <motion.div
-      className="fixed pointer-events-none z-50 font-bold text-2xl text-white drop-shadow-lg"
+      className="fixed pointer-events-none z-50"
       style={{ left: data.x, top: data.y }}
-      initial={{ opacity: 1, y: 0, scale: 1 }}
-      animate={{ opacity: 0, y: -100, scale: 1.5 }}
-      transition={{ duration: 0.8, ease: 'easeOut' }}
-      onAnimationComplete={() => onComplete(data.id)}
+      initial={{ opacity: 0, y: 0, scale: 0.5 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
     >
-      +{data.value}
+      {/* Основной пузырь */}
+      <motion.div
+        className="relative flex items-center justify-center"
+        initial={{ scale: 0.85 }}
+        animate={{ 
+          scale: [0.85, 1.1, 1.0],
+          y: [0, -55],
+          opacity: [1, 1, 0]
+        }}
+        transition={{ 
+          duration: 0.9,
+          times: [0, 0.25, 1],
+          ease: 'easeOut'
+        }}
+        onAnimationComplete={() => onComplete(data.id)}
+      >
+        {/* Bubble container с градиентом и glow */}
+        <div 
+          className="relative w-12 h-12 rounded-full flex items-center justify-center"
+          style={{
+            background: 'linear-gradient(135deg, #00E5FF 0%, #0052FF 100%)',
+            boxShadow: '0 0 12px rgba(0,229,255,0.75), 0 0 24px rgba(0,82,255,0.35), inset 0 1px 2px rgba(255,255,255,0.4)',
+            border: '2px solid rgba(255,255,255,0.9)',
+          }}
+        >
+          {/* Глянец сверху */}
+          <div 
+            className="absolute top-1 left-1/2 -translate-x-1/2 w-6 h-3 rounded-full"
+            style={{
+              background: 'linear-gradient(180deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%)',
+            }}
+          />
+          
+          {/* Текст +1 */}
+          <span 
+            className="relative z-10 font-black text-lg select-none"
+            style={{
+              color: '#FFFFFF',
+              textShadow: '0 1px 2px rgba(0,0,0,0.3), 0 0 8px rgba(0,229,255,0.6)',
+            }}
+          >
+            +{data.value}
+          </span>
+        </div>
+
+        {/* Энерго-частицы (трейл) */}
+        {particles.map((particle, i) => (
+          <motion.div
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              width: 6 + Math.random() * 4,
+              height: 6 + Math.random() * 4,
+              background: 'linear-gradient(135deg, #00E5FF 0%, #0052FF 100%)',
+              boxShadow: '0 0 6px rgba(0,229,255,0.5)',
+              left: '50%',
+              top: '100%',
+            }}
+            initial={{ 
+              opacity: 0.5, 
+              scale: 0.8,
+              x: particle.x,
+              y: 0
+            }}
+            animate={{ 
+              opacity: 0, 
+              scale: 0.3,
+              x: particle.x * 1.5,
+              y: 20
+            }}
+            transition={{ 
+              duration: particle.duration,
+              delay: particle.delay,
+              ease: 'easeOut'
+            }}
+          />
+        ))}
+      </motion.div>
     </motion.div>
   );
 };
 
-export default FloatingBubble;
+export default React.memo(FloatingBubble);
