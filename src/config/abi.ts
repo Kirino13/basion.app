@@ -1,0 +1,297 @@
+export const BASION_ABI = [
+  // Constructor
+  {
+    inputs: [{ internalType: 'address', name: '_treasury', type: 'address' }],
+    stateMutability: 'nonpayable',
+    type: 'constructor',
+  },
+
+  // Events
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'user', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'amount', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'packageType', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'tapsAdded', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'toTreasury', type: 'uint256' },
+    ],
+    name: 'Deposited',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'user', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'burner', type: 'address' },
+    ],
+    name: 'BurnerRegistered',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'user', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'newPoints', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'tapsRemaining', type: 'uint256' },
+      { indexed: false, internalType: 'uint256', name: 'count', type: 'uint256' },
+    ],
+    name: 'Tapped',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'user', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'referrerAddr', type: 'address' },
+    ],
+    name: 'ReferrerSet',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'user', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'referrerAddr', type: 'address' },
+    ],
+    name: 'ReferralActivated',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: 'address', name: 'referrerAddr', type: 'address' },
+      { indexed: true, internalType: 'address', name: 'from', type: 'address' },
+      { indexed: false, internalType: 'uint256', name: 'bonus', type: 'uint256' },
+    ],
+    name: 'ReferralBonusEarned',
+    type: 'event',
+  },
+  {
+    anonymous: false,
+    inputs: [{ indexed: true, internalType: 'address', name: 'newTreasury', type: 'address' }],
+    name: 'TreasuryUpdated',
+    type: 'event',
+  },
+
+  // Write Functions
+  {
+    inputs: [{ internalType: 'uint256', name: 'packageType', type: 'uint256' }],
+    name: 'deposit',
+    outputs: [],
+    stateMutability: 'payable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'burnerAddress', type: 'address' }],
+    name: 'registerBurner',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'tap',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'uint256', name: 'count', type: 'uint256' }],
+    name: 'tapMultiple',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_referrer', type: 'address' }],
+    name: 'setReferrer',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '_treasury', type: 'address' }],
+    name: 'setTreasury',
+    outputs: [],
+    stateMutability: 'nonpayable',
+    type: 'function',
+  },
+
+  // Read Functions
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getGameStats',
+    outputs: [
+      { internalType: 'uint256', name: '_tapBalance', type: 'uint256' },
+      { internalType: 'uint256', name: '_points', type: 'uint256' },
+      { internalType: 'uint256', name: '_totalTaps', type: 'uint256' },
+      { internalType: 'address', name: '_burner', type: 'address' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getReferralStats',
+    outputs: [
+      { internalType: 'address', name: '_referrer', type: 'address' },
+      { internalType: 'bool', name: '_isActive', type: 'bool' },
+      { internalType: 'uint256', name: '_bonus', type: 'uint256' },
+      { internalType: 'uint256', name: '_count', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getTapBalance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getPoints',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getTotalTaps',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'user', type: 'address' }],
+    name: 'getBurner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: 'burner', type: 'address' }],
+    name: 'getMainWallet',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+
+  // Constants
+  {
+    inputs: [],
+    name: 'TAPS_PACKAGE_SMALL',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'TAPS_PACKAGE_LARGE',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'TREASURY_PERCENT',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'REFERRAL_ACTIVATION',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'REFERRAL_BONUS_RATE',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'owner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [],
+    name: 'treasury',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+
+  // Mappings (public)
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'tapBalance',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'points',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'totalTaps',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'userToBurner',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'burnerToUser',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'referrer',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'referralActive',
+    outputs: [{ internalType: 'bool', name: '', type: 'bool' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'referralBonus',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+  {
+    inputs: [{ internalType: 'address', name: '', type: 'address' }],
+    name: 'referralCount',
+    outputs: [{ internalType: 'uint256', name: '', type: 'uint256' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+] as const;
