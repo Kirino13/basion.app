@@ -217,12 +217,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
         <FloatingBubble key={b.id} data={b} onComplete={removeBubble} />
       ))}
 
-      {/* Taps display */}
-      <div className="text-center">
-        <p className="text-4xl font-bold text-white drop-shadow-md">{localTaps.toLocaleString().replace(/,/g, ' ')}</p>
-        <p className="text-white/70 text-sm">Taps remaining</p>
-      </div>
-
       {/* Square TAP button - entire white block is clickable */}
       <motion.div
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}

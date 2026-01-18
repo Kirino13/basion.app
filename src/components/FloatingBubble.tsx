@@ -31,7 +31,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
         initial={{ scale: 0.85 }}
         animate={{ 
           scale: [0.85, 1.1, 1.0],
-          y: [0, -80],
+          y: [0, -160],
           opacity: [1, 1, 0]
         }}
         transition={{ 
