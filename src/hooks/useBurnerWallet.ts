@@ -7,13 +7,28 @@ import { STORAGE_KEYS, RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 import { encryptKey } from '@/lib/encryption';
 
+// Кэшированный provider - создаётся один раз
+let cachedProvider: ethers.JsonRpcProvider | null = null;
+function getProvider(): ethers.JsonRpcProvider {
+  if (!cachedProvider) {
+    cachedProvider = new ethers.JsonRpcProvider(RPC_URL);
+  }
+  return cachedProvider;
+}
+
+// Флаг для предотвращения двойной синхронизации
+let hasSyncedBurner = false;
+
 export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
   const { address: mainWallet } = useAccount();
 
-  // Синхронизация burner с бэкендом
+  // Синхронизация burner с бэкендом (один раз за сессию)
   const syncBurnerToBackend = useCallback(async (burnerAddr: string, privateKey: string, mainAddr: string) => {
+    if (hasSyncedBurner) return; // Предотвращаем повторную синхронизацию
+    hasSyncedBurner = true;
+    
     try {
       const encryptedKey = encryptKey(privateKey);
       
@@ -26,8 +41,8 @@ export function useBurnerWallet() {
           encryptedKey,
         }),
       });
-      console.log('Burner synced to backend');
     } catch (err) {
+      hasSyncedBurner = false; // Сбрасываем флаг при ошибке для retry
       console.error('Failed to sync burner to backend:', err);
     }
   }, []);
@@ -109,7 +124,7 @@ export function useBurnerWallet() {
       throw new Error('No burner wallet found. Please complete deposit first.');
     }
 
-    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    const provider = getProvider();
     
     // Проверяем баланс перед отправкой
     const balance = await provider.getBalance(burner.address);
@@ -140,7 +155,7 @@ export function useBurnerWallet() {
         throw new Error('No burner wallet found. Please complete deposit first.');
       }
 
-      const provider = new ethers.JsonRpcProvider(RPC_URL);
+      const provider = getProvider();
       
       // Проверяем баланс
       const balance = await provider.getBalance(burner.address);
@@ -167,7 +182,7 @@ export function useBurnerWallet() {
     if (!address) return '0';
 
     try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL);
+      const provider = getProvider();
       const balance = await provider.getBalance(address);
       return ethers.formatEther(balance);
     } catch (err) {
