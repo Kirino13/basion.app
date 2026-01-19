@@ -38,8 +38,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const packages = GAME_CONFIG.packages;
   const selectedPkg = packages[selectedPackage];
   
-  // Use contract price or fallback to USD conversion
-  const ethAmount = selectedPkg.priceWei;
+  // Price in ETH from config
+  const ethAmount = selectedPkg.priceEth;
 
   // Get referrer from localStorage
   const getReferrer = (): `0x${string}` => {
@@ -93,7 +93,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         }, 2000);
       }
     }
-  }, [txConfirmed, step]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txConfirmed, step]); // proceedToDeposit/refetchGameStats/onClose are stable
 
   // Handle transaction error
   useEffect(() => {

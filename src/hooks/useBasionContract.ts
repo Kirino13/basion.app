@@ -62,7 +62,7 @@ export function useBasionContract() {
       abi: BASION_ABI,
       functionName: 'deposit',
       args: [BigInt(packageId), referrerAddress || '0x0000000000000000000000000000000000000000'],
-      value: parseEther(pkg.priceWei),
+      value: parseEther(pkg.priceEth),
     });
   };
 

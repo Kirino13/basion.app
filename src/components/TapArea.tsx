@@ -138,7 +138,10 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   }, []);
 
   const handleTap = useCallback(
-    async (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    async (e: React.PointerEvent<HTMLDivElement>) => {
+      // Prevent default to avoid any browser handling
+      e.preventDefault();
+      
       // Clear previous error
       setError(null);
 
@@ -172,15 +175,9 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Get click position
-      let clientX: number, clientY: number;
-      if ('touches' in e) {
-        clientX = e.touches[0].clientX;
-        clientY = e.touches[0].clientY;
-      } else {
-        clientX = e.clientX;
-        clientY = e.clientY;
-      }
+      // Get click position from pointer event
+      const clientX = e.clientX;
+      const clientY = e.clientY;
 
       // Start tap
       setIsProcessing(true);
@@ -251,12 +248,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       ))}
 
       {/* Square TAP button - entire white block is clickable */}
+      {/* Using onPointerDown instead of onClick+onTouchStart to prevent double-tap on mobile */}
       <motion.div
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
-        onClick={handleTap}
-        onTouchStart={handleTap}
-        className={`relative w-64 h-64 lg:w-72 lg:h-72 bg-white rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        onPointerDown={handleTap}
+        className={`relative w-64 h-64 lg:w-72 lg:h-72 bg-white rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] select-none touch-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
         {/* Blue square inside */}
         <div 

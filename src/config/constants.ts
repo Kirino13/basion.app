@@ -8,8 +8,8 @@ export const ADMIN_WALLET = (process.env.NEXT_PUBLIC_ADMIN_WALLET || '0x52a3435A
 export const GAME_CONFIG = {
   // Package IDs match contract array indices (0 and 1)
   packages: {
-    0: { usd: 3, taps: 5000, priceWei: '0.001' },   // packageId 0
-    1: { usd: 10, taps: 20000, priceWei: '0.003' }, // packageId 1
+    0: { usd: 3, taps: 5000, priceEth: '0.001' },   // packageId 0 - price in ETH
+    1: { usd: 10, taps: 20000, priceEth: '0.003' }, // packageId 1 - price in ETH
   },
   treasuryPercent: 30,
   burnerPercent: 70,
