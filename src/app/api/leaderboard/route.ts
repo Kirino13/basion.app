@@ -16,9 +16,9 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('users')
-      .select('main_wallet, points')
-      .gt('points', 0) // Only users with points
-      .order('points', { ascending: false })
+      .select('main_wallet, total_points')
+      .gt('total_points', 0) // Only users with points
+      .order('total_points', { ascending: false })
       .limit(limit);
 
     if (error) {
@@ -30,7 +30,7 @@ export async function GET(request: Request) {
     const leaderboard = (data || []).map((user, index) => ({
       rank: index + 1,
       wallet: user.main_wallet,
-      points: user.points || 0,
+      points: user.total_points || 0,
     }));
 
     return NextResponse.json(leaderboard);
