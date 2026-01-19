@@ -4,7 +4,7 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { mainWallet, points, totalTaps, tapBalance } = body;
+    const { mainWallet, points, premiumPoints, standardPoints, tapBalance } = body;
 
     if (!mainWallet) {
       return NextResponse.json({ error: 'Missing mainWallet' }, { status: 400 });
@@ -17,21 +17,27 @@ export async function POST(request: Request) {
     }
 
     // Build update object - only include fields with valid values
-    // This prevents overwriting with 0 if data is missing
     const updateData: Record<string, unknown> = {
       main_wallet: mainWallet.toLowerCase(),
       last_tap_at: new Date().toISOString(),
     };
     
-    // Only update points if we have a valid number
+    // Update total points (premium + standard)
     if (typeof points === 'number' && points >= 0) {
-      updateData.points = points;
+      updateData.total_points = points;
     }
     
-    if (typeof totalTaps === 'number' && totalTaps >= 0) {
-      updateData.total_taps = totalTaps;
+    // Update premium points (more valuable - 1 tap = 1 tx)
+    if (typeof premiumPoints === 'number' && premiumPoints >= 0) {
+      updateData.premium_points = premiumPoints;
     }
     
+    // Update standard points (batch mode)
+    if (typeof standardPoints === 'number' && standardPoints >= 0) {
+      updateData.standard_points = standardPoints;
+    }
+    
+    // Update tap balance
     if (typeof tapBalance === 'number' && tapBalance >= 0) {
       updateData.taps_remaining = tapBalance;
     }

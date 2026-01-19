@@ -3,12 +3,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Wallet, Zap, Check, Loader2 } from 'lucide-react';
-import { ethers } from 'ethers';
 import { parseEther } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { CONTRACT_ADDRESS, GAME_CONFIG } from '@/config/constants';
+import { CONTRACT_ADDRESS, GAME_CONFIG, STORAGE_KEYS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
-import { useBurnerWallet } from '@/hooks';
+import { useBurnerWallet, useBasionContract } from '@/hooks';
 import { getEthPrice, usdToEth } from '@/lib/price';
 
 interface DepositModalProps {
@@ -16,34 +15,41 @@ interface DepositModalProps {
   onClose: () => void;
 }
 
-type DepositStep = 'select' | 'depositing' | 'creating-burner' | 'transferring' | 'registering' | 'awaiting-register' | 'done' | 'error';
+type DepositStep = 'select' | 'creating-burner' | 'registering' | 'depositing' | 'done' | 'error';
 
 const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const { address } = useAccount();
-  const [selectedPackage, setSelectedPackage] = useState<1 | 2>(1);
+  const [selectedPackage, setSelectedPackage] = useState<0 | 1>(0);
   const [ethPrice, setEthPrice] = useState<number | null>(null);
   const [isPriceLoading, setIsPriceLoading] = useState(true);
   const [step, setStep] = useState<DepositStep>('select');
   const [error, setError] = useState<string | null>(null);
   const [newBurnerAddress, setNewBurnerAddress] = useState<string | null>(null);
-  const [depositTxHash, setDepositTxHash] = useState<`0x${string}` | undefined>(undefined);
-  const [registerTxHash, setRegisterTxHash] = useState<`0x${string}` | undefined>(undefined);
 
-  const { createBurner, getBurner, registerBurnerWithBackend } = useBurnerWallet();
+  const { createBurner, getBurner, hasBurner, registerBurnerWithBackend } = useBurnerWallet();
+  const { burner: contractBurner, refetchGameStats } = useBasionContract();
+  
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract();
   
-  // Track deposit transaction
-  const { isLoading: isConfirming, isSuccess: depositConfirmed, isError: depositFailed } = useWaitForTransactionReceipt({
-    hash: depositTxHash,
-  });
-  
-  // Track registerBurner transaction
-  const { isSuccess: registerConfirmed, isError: registerFailed } = useWaitForTransactionReceipt({
-    hash: registerTxHash,
+  const { isLoading: isConfirming, isSuccess: txConfirmed, isError: txFailed } = useWaitForTransactionReceipt({
+    hash: txHash,
   });
 
   const packages = GAME_CONFIG.packages;
-  const ethAmount = ethPrice ? usdToEth(packages[selectedPackage].usd, ethPrice) : '0';
+  const selectedPkg = packages[selectedPackage];
+  
+  // Use contract price or fallback to USD conversion
+  const ethAmount = selectedPkg.priceWei;
+
+  // Get referrer from localStorage
+  const getReferrer = (): `0x${string}` => {
+    if (typeof window === 'undefined') return '0x0000000000000000000000000000000000000000';
+    const stored = localStorage.getItem(STORAGE_KEYS.referrer);
+    if (stored && stored.startsWith('0x') && stored.length === 42) {
+      return stored as `0x${string}`;
+    }
+    return '0x0000000000000000000000000000000000000000';
+  };
 
   // Load ETH price on open
   useEffect(() => {
@@ -56,7 +62,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         })
         .catch((err) => {
           console.error('Failed to fetch ETH price:', err);
-          setError('Failed to get ETH price. Please try again later.');
+          // Still allow deposit with contract prices
           setIsPriceLoading(false);
         });
     }
@@ -68,172 +74,105 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       setStep('select');
       setError(null);
       setNewBurnerAddress(null);
-      setDepositTxHash(undefined);
-      setRegisterTxHash(undefined);
       resetWrite();
     }
   }, [isOpen, resetWrite]);
 
-  // Track transaction hash for deposit
+  // Handle transaction confirmation
   useEffect(() => {
-    if (txHash && step === 'depositing') {
-      setDepositTxHash(txHash);
-    }
-  }, [txHash, step]);
-
-  // Track transaction hash for registerBurner
-  useEffect(() => {
-    if (txHash && step === 'awaiting-register') {
-      setRegisterTxHash(txHash);
-    }
-  }, [txHash, step]);
-
-  // Handle registerBurner confirmation
-  useEffect(() => {
-    if (registerConfirmed && step === 'awaiting-register') {
-      setStep('done');
-      // Auto close after success
-      setTimeout(() => {
-        onClose();
-      }, 2000);
-    }
-  }, [registerConfirmed, step, onClose]);
-
-  // Handle registerBurner error
-  useEffect(() => {
-    if (registerFailed && step === 'awaiting-register') {
-      setError('Failed to register tap wallet. Please try again.');
-      setStep('error');
-    }
-  }, [registerFailed, step]);
-
-  // Handle writeContract error
-  useEffect(() => {
-    if (writeError && (step === 'depositing' || step === 'awaiting-register')) {
-      console.error('Write contract error:', writeError);
-      const errorMessage = writeError.message || '';
-      if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
-        setError('Transaction cancelled');
-      } else if (step === 'awaiting-register') {
-        setError('Registration error: ' + (writeError.message || 'Unknown error'));
-      } else {
-        setError('Deposit error: ' + (writeError.message || 'Unknown error'));
+    if (txConfirmed) {
+      if (step === 'registering') {
+        // Burner registered, now deposit
+        proceedToDeposit();
+      } else if (step === 'depositing') {
+        // Deposit confirmed!
+        setStep('done');
+        refetchGameStats();
+        setTimeout(() => {
+          onClose();
+        }, 2000);
       }
-      setStep('error');
     }
-  }, [writeError, step]);
-
-  // Handle deposit confirmation
-  useEffect(() => {
-    if (depositConfirmed && step === 'depositing') {
-      createBurnerAndRegister();
-    }
-  }, [depositConfirmed, step]);
+  }, [txConfirmed, step]);
 
   // Handle transaction error
   useEffect(() => {
-    if (depositFailed && step === 'depositing') {
-      setError('Deposit transaction failed');
+    if (txFailed || writeError) {
+      const errorMessage = writeError?.message || 'Transaction failed';
+      if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
+        setError('Transaction cancelled');
+      } else if (errorMessage.includes('Already registered')) {
+        // Burner already registered, proceed to deposit
+        proceedToDeposit();
+        return;
+      } else {
+        setError(errorMessage.slice(0, 100));
+      }
       setStep('error');
     }
-  }, [depositFailed, step]);
+  }, [txFailed, writeError]);
+
+  const proceedToDeposit = useCallback(() => {
+    setStep('depositing');
+    resetWrite();
+    
+    const referrer = getReferrer();
+    
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: BASION_ABI,
+      functionName: 'deposit',
+      args: [BigInt(selectedPackage), referrer],
+      value: parseEther(ethAmount),
+    });
+  }, [selectedPackage, ethAmount, writeContract, resetWrite]);
 
   const handleDeposit = async () => {
     if (!address) {
       setError('Wallet not connected');
       return;
     }
-    if (!ethPrice) {
-      setError('ETH price not loaded');
-      return;
-    }
 
     setError(null);
-    setStep('depositing');
 
     try {
-      writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: BASION_ABI,
-        functionName: 'deposit',
-        args: [BigInt(selectedPackage)],
-        value: parseEther(ethAmount),
-      });
+      // Check if burner exists locally
+      let burner = getBurner();
+      const burnerRegisteredInContract = contractBurner && contractBurner !== '0x0000000000000000000000000000000000000000';
+
+      if (!burner) {
+        // Create new burner
+        setStep('creating-burner');
+        burner = createBurner();
+        setNewBurnerAddress(burner.address);
+        
+        // Register with backend
+        await registerBurnerWithBackend(burner.address, burner.privateKey);
+      } else {
+        setNewBurnerAddress(burner.address);
+      }
+
+      // Check if need to register burner in contract
+      if (!burnerRegisteredInContract) {
+        setStep('registering');
+        
+        writeContract({
+          address: CONTRACT_ADDRESS,
+          abi: BASION_ABI,
+          functionName: 'registerBurner',
+          args: [burner.address as `0x${string}`],
+        });
+      } else {
+        // Burner already registered, go straight to deposit
+        proceedToDeposit();
+      }
     } catch (err) {
       console.error('Deposit error:', err);
-      setError('Failed to send transaction');
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      setError(errorMessage);
       setStep('error');
     }
   };
-
-  const createBurnerAndRegister = useCallback(async () => {
-    if (!address || !ethPrice) return;
-
-    try {
-      setStep('creating-burner');
-
-      // Check if burner exists (either local or restored from Supabase)
-      const existingBurner = getBurner();
-      const isNewBurner = !existingBurner;
-      const burner = existingBurner || createBurner();
-      setNewBurnerAddress(burner.address);
-
-      // Fixed amount for burner gas (0.0005 ETH ~ $1.50 for ~300 taps gas)
-      const BURNER_GAS_ETH = '0.0005';
-      const forBurner = parseEther(BURNER_GAS_ETH);
-
-      // Check for provider
-      if (!window.ethereum) {
-        throw new Error('Wallet not found. Please install MetaMask or Rabby.');
-      }
-
-      setStep('transferring');
-
-      // Transfer ETH to burner (always needed for gas top-up)
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-
-      const transferTx = await signer.sendTransaction({
-        to: burner.address,
-        value: forBurner,
-      });
-      await transferTx.wait();
-
-      setStep('registering');
-
-      // Only register NEW burners with backend (existing ones are already there)
-      if (isNewBurner) {
-        await registerBurnerWithBackend(burner.address, burner.privateKey);
-      }
-
-      // Reset writeContract state before new call
-      resetWrite();
-      
-      // Set step to awaiting BEFORE calling writeContract
-      setStep('awaiting-register');
-      
-      // Register burner in contract (user must confirm this)
-      // Even for existing burners - might need to re-register if contract state is different
-      writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: BASION_ABI,
-        functionName: 'registerBurner',
-        args: [burner.address as `0x${string}`],
-      });
-      
-      // The effect watching registerConfirmed will handle setStep('done') and auto-close
-    } catch (err) {
-      console.error('Burner setup error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      
-      if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
-        setError('Transaction cancelled');
-      } else {
-        setError('Setup error: ' + errorMessage);
-      }
-      setStep('error');
-    }
-  }, [address, ethPrice, getBurner, createBurner, registerBurnerWithBackend, writeContract, resetWrite]);
 
   const getStepContent = () => {
     switch (step) {
@@ -250,29 +189,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
             {isPriceLoading ? (
               <div className="text-center py-8">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
-                <p className="text-white/60">Loading ETH price...</p>
-              </div>
-            ) : error ? (
-              <div className="text-center py-8">
-                <p className="text-red-400">{error}</p>
-                <button
-                  onClick={() => {
-                    setError(null);
-                    setIsPriceLoading(true);
-                    getEthPrice()
-                      .then(setEthPrice)
-                      .catch(() => setError('Failed to load price'))
-                      .finally(() => setIsPriceLoading(false));
-                  }}
-                  className="mt-4 px-4 py-2 bg-white/10 rounded-lg text-white hover:bg-white/20"
-                >
-                  Try again
-                </button>
+                <p className="text-white/60">Loading...</p>
               </div>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-4 mb-8">
-                  {([1, 2] as const).map((pkg) => (
+                  {([0, 1] as const).map((pkg) => (
                     <button
                       key={pkg}
                       onClick={() => setSelectedPackage(pkg)}
@@ -292,16 +214,15 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                 </div>
 
                 <div className="text-center text-white/60 mb-4 space-y-1">
-                  <p>Package: <span className="text-white font-bold">{ethAmount} ETH</span></p>
-                  <p className="text-xs">+ Gas for taps: <span className="text-white">0.0005 ETH</span></p>
-                  <p className="text-sm border-t border-white/10 pt-2 mt-2">
-                    Total: <span className="text-white font-bold">{(parseFloat(ethAmount) + 0.0005).toFixed(6)} ETH</span>
+                  <p>Price: <span className="text-white font-bold">{ethAmount} ETH</span></p>
+                  <p className="text-xs text-white/40">
+                    70% for tap gas • 30% platform fee
                   </p>
                 </div>
 
                 <button
                   onClick={handleDeposit}
-                  disabled={isWritePending || isConfirming || !ethPrice}
+                  disabled={isWritePending || isConfirming}
                   className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-lg text-white shadow-lg shadow-blue-600/30 transform transition active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isWritePending || isConfirming ? 'Processing...' : 'Confirm Purchase'}
@@ -309,15 +230,6 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
               </>
             )}
           </>
-        );
-
-      case 'depositing':
-        return (
-          <div className="text-center py-8">
-            <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Processing deposit...</p>
-            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet</p>
-          </div>
         );
 
       case 'creating-burner':
@@ -329,31 +241,24 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
           </div>
         );
 
-      case 'transferring':
-        return (
-          <div className="text-center py-8">
-            <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Transferring funds to tap wallet...</p>
-            <p className="text-white/60 text-sm mt-2">Confirm transfer in your wallet</p>
-          </div>
-        );
-
       case 'registering':
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Preparing registration...</p>
-            <p className="text-white/60 text-sm mt-2">Please wait...</p>
+            <p className="text-white text-lg">Registering tap wallet...</p>
+            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet (1/2)</p>
           </div>
         );
 
-      case 'awaiting-register':
+      case 'depositing':
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
-            <p className="text-white text-lg">Registering tap wallet...</p>
-            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet (step 3/3)</p>
-            <p className="text-white/40 text-xs mt-4">Do not close this window until confirmed</p>
+            <p className="text-white text-lg">Processing deposit...</p>
+            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet (2/2)</p>
+            <p className="text-white/40 text-xs mt-4">
+              70% will be sent to your tap wallet for gas
+            </p>
           </div>
         );
 
@@ -363,9 +268,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
             <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-8 h-8 text-white" />
             </div>
-            <p className="text-green-400 text-xl font-bold">Ready to play!</p>
+            <p className="text-green-400 text-xl font-bold">Ready to tap!</p>
+            <p className="text-white/60 text-sm mt-2">
+              {packages[selectedPackage].taps.toLocaleString()} taps added
+            </p>
             {newBurnerAddress && (
-              <p className="text-white/60 text-xs mt-4 font-mono">
+              <p className="text-white/40 text-xs mt-4 font-mono">
                 Tap wallet: {newBurnerAddress.slice(0, 10)}...{newBurnerAddress.slice(-8)}
               </p>
             )}
@@ -379,11 +287,12 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
               <X className="w-8 h-8 text-white" />
             </div>
             <p className="text-red-400 text-xl font-bold">Something went wrong</p>
-            <p className="text-white/60 text-sm mt-2">{error}</p>
+            <p className="text-white/60 text-sm mt-2 break-words">{error}</p>
             <button
               onClick={() => {
                 setStep('select');
                 setError(null);
+                resetWrite();
               }}
               className="mt-4 px-6 py-2 bg-white/10 rounded-lg text-white hover:bg-white/20"
             >
@@ -420,7 +329,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
             {getStepContent()}
 
-            {step === 'select' && !isPriceLoading && !error && (
+            {step === 'select' && !isPriceLoading && (
               <button onClick={onClose} className="mt-4 w-full py-2 text-white/50 hover:text-white/70">
                 Cancel
               </button>

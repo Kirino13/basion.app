@@ -14,7 +14,6 @@ interface TapAreaProps {
 const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
   const [localTaps, setLocalTaps] = useState(0);
-  const [localPoints, setLocalPoints] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
@@ -25,7 +24,15 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
-  const { tapBalance, points, totalTaps, isConnected, address, refetchGameStats } = useBasionContract();
+  const { 
+    tapBalance, 
+    points, 
+    premiumPoints,
+    standardPoints,
+    isConnected, 
+    address, 
+    refetchGameStats 
+  } = useBasionContract();
 
   // Sync local state with contract
   useEffect(() => {
@@ -39,26 +46,26 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     pendingSyncRef.current = true;
     
     try {
-      const result = await refetchGameStats();
-      if (result.data) {
-        const data = result.data as [bigint, bigint, bigint, string];
-        await fetch('/api/sync-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mainWallet: address,
-            points: Number(data[1]),
-            totalTaps: Number(data[2]),
-            tapBalance: Number(data[0]),
-          }),
-        });
-      }
+      await refetchGameStats();
+      
+      // Sync to Supabase
+      await fetch('/api/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mainWallet: address,
+          points: points,
+          premiumPoints: premiumPoints,
+          standardPoints: standardPoints,
+          tapBalance: tapBalance,
+        }),
+      });
     } catch (err) {
       console.error('Sync error:', err);
     } finally {
       pendingSyncRef.current = false;
     }
-  }, [address, refetchGameStats]);
+  }, [address, refetchGameStats, points, premiumPoints, standardPoints, tapBalance]);
 
   // Schedule sync (with 5 sec debounce)
   const scheduleSync = useCallback(() => {
@@ -79,7 +86,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
             body: JSON.stringify({
               mainWallet: address,
               points: points,
-              totalTaps: totalTaps,
+              premiumPoints: premiumPoints,
+              standardPoints: standardPoints,
               tapBalance: tapBalance,
             }),
           });
@@ -90,18 +98,17 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, [address, hasSynced, points, totalTaps, tapBalance]);
+  }, [address, hasSynced, points, premiumPoints, standardPoints, tapBalance]);
 
   // Cleanup timer on unmount and sync on page unload
   useEffect(() => {
-    // Sync data when page becomes hidden (user switches tab or closes)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden' && address) {
-        // Use sendBeacon for reliable sync on page hide
         const data = JSON.stringify({
           mainWallet: address,
           points: points,
-          totalTaps: totalTaps,
+          premiumPoints: premiumPoints,
+          standardPoints: standardPoints,
           tapBalance: localTaps,
         });
         navigator.sendBeacon('/api/sync-user', new Blob([data], { type: 'application/json' }));
@@ -116,7 +123,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [address, points, totalTaps, localTaps]);
+  }, [address, points, premiumPoints, standardPoints, localTaps]);
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -195,14 +202,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         // Wait for transaction to be mined (1 confirmation)
         await tx.wait();
         
-        // Transaction confirmed! Now fetch updated stats from contract
-        const result = await refetchGameStats();
+        // Transaction confirmed! Fetch updated stats from contract
+        await refetchGameStats();
         
-        // Update local state from contract data
-        if (result.data) {
-          const data = result.data as [bigint, bigint, bigint, string];
-          setLocalTaps(Number(data[0]));
-        }
+        // Update local state
+        setLocalTaps(prev => Math.max(0, prev - 1));
         
         // Call success callback
         if (onTapSuccess) {
@@ -223,17 +227,18 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           setError('Tap wallet not found');
         } else if (errorMessage.includes('nonce')) {
           setError('Too many taps. Please wait.');
+        } else if (errorMessage.includes('No taps')) {
+          setError('Out of taps! Buy more.');
+          setLocalTaps(0);
         } else {
           setError('Tap failed. Try again.');
         }
-        
-        // No rollback needed - we didn't optimistically update
       } finally {
         setIsProcessing(false);
         completeTap();
       }
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync]
+    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
