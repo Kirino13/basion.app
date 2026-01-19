@@ -19,34 +19,14 @@ function getProvider(): ethers.JsonRpcProvider {
 // Flag to prevent double sync
 let hasSyncedBurner = false;
 
-// Store the last known wallet to detect changes
-const LAST_WALLET_KEY = 'basion_last_wallet';
-
 export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
   const { address: mainWallet } = useAccount();
   
-  // Detect wallet changes and protect against abuse
-  useEffect(() => {
-    if (typeof window === 'undefined' || !mainWallet) return;
-    
-    const lastWallet = localStorage.getItem(LAST_WALLET_KEY);
-    
-    // If there was a previous wallet and it's different, this is a wallet switch
-    if (lastWallet && lastWallet.toLowerCase() !== mainWallet.toLowerCase()) {
-      // Clear burner data to prevent abuse - new wallet needs its own burner
-      console.log('Wallet changed. Clearing local burner data for security.');
-      localStorage.removeItem(STORAGE_KEYS.burnerKey);
-      localStorage.removeItem(STORAGE_KEYS.burnerAddress);
-      setBurnerAddress(null);
-      setHasBurner(false);
-      hasSyncedBurner = false;
-    }
-    
-    // Update last known wallet
-    localStorage.setItem(LAST_WALLET_KEY, mainWallet);
-  }, [mainWallet]);
+  // Note: Burner wallet is NOT cleared on wallet switch
+  // The burner is tied to the wallet that created it via contract registration
+  // If user switches wallets, they just need to reconnect - burner stays in localStorage
 
   // Sync burner with backend (once per session)
   const syncBurnerToBackend = useCallback(async (burnerAddr: string, privateKey: string, mainAddr: string) => {

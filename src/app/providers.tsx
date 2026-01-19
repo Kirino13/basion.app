@@ -7,59 +7,27 @@ import { useState, useEffect, useRef } from 'react';
 import { useAccount, useSwitchChain, useDisconnect } from 'wagmi';
 import { baseSepolia } from 'wagmi/chains';
 
-// Storage key for tracking connected wallet
-const CONNECTED_WALLET_KEY = 'basion_connected_wallet';
-
-// Component to handle wallet switching protection
+// Component to handle wallet switching - just disconnect on switch, don't clear anything
 function WalletGuard({ children }: { children: React.ReactNode }) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const previousAddressRef = useRef<string | null>(null);
-  const isFirstMount = useRef(true);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    // On first mount, check if this is the same wallet that was previously connected
-    if (isFirstMount.current && isConnected && address) {
-      const savedWallet = localStorage.getItem(CONNECTED_WALLET_KEY);
-      
-      // If there's a saved wallet and it's different from current, disconnect
-      if (savedWallet && savedWallet.toLowerCase() !== address.toLowerCase()) {
-        console.log('Different wallet detected on load. Disconnecting for security.');
-        disconnect();
-        localStorage.removeItem(CONNECTED_WALLET_KEY);
-        isFirstMount.current = false;
-        return;
-      }
-      
-      // Save current wallet as connected
-      localStorage.setItem(CONNECTED_WALLET_KEY, address);
-      previousAddressRef.current = address;
-      isFirstMount.current = false;
+    if (!isConnected || !address) {
+      previousAddressRef.current = null;
       return;
     }
 
-    // After first mount, detect wallet switches
-    if (!isFirstMount.current && isConnected && address) {
-      // If address changed (user switched in MetaMask/Rabby)
-      if (previousAddressRef.current && previousAddressRef.current.toLowerCase() !== address.toLowerCase()) {
-        console.log('Wallet switched. Disconnecting - please reconnect manually.');
-        disconnect();
-        localStorage.removeItem(CONNECTED_WALLET_KEY);
-        return;
-      }
-      
-      // Update tracked address
-      previousAddressRef.current = address;
-      localStorage.setItem(CONNECTED_WALLET_KEY, address);
+    // If we had a previous address and it changed = wallet switch in MetaMask/Rabby
+    if (previousAddressRef.current && previousAddressRef.current.toLowerCase() !== address.toLowerCase()) {
+      console.log('Wallet switched in provider. Please reconnect.');
+      disconnect();
+      return;
     }
 
-    // If disconnected, clear saved wallet
-    if (!isConnected) {
-      localStorage.removeItem(CONNECTED_WALLET_KEY);
-      previousAddressRef.current = null;
-    }
+    // Track current address
+    previousAddressRef.current = address;
   }, [address, isConnected, disconnect]);
 
   return <>{children}</>;
