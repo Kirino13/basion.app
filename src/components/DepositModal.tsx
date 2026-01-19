@@ -178,9 +178,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       const burner = existingBurner || createBurner();
       setNewBurnerAddress(burner.address);
 
-      // Calculate 70% for transfer to burner
-      const totalWei = parseEther(ethAmount);
-      const forBurner = (totalWei * 70n) / 100n;
+      // Fixed amount for burner gas (0.0005 ETH ~ $1.50 for ~300 taps gas)
+      // This is separate from the tap package - just gas money
+      const BURNER_GAS_ETH = '0.0005';
+      const forBurner = parseEther(BURNER_GAS_ETH);
 
       // Check for provider
       if (!window.ethereum) {
@@ -306,9 +307,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                   ))}
                 </div>
 
-                <p className="text-center text-white/60 mb-4">
-                  Total: <span className="text-white font-bold">{ethAmount} ETH</span>
-                </p>
+                <div className="text-center text-white/60 mb-4 space-y-1">
+                  <p>Package: <span className="text-white font-bold">{ethAmount} ETH</span></p>
+                  <p className="text-xs">+ Gas for taps: <span className="text-white">0.0005 ETH</span></p>
+                  <p className="text-sm border-t border-white/10 pt-2 mt-2">
+                    Total: <span className="text-white font-bold">{(parseFloat(ethAmount) + 0.0005).toFixed(6)} ETH</span>
+                  </p>
+                </div>
 
                 <button
                   onClick={handleDeposit}

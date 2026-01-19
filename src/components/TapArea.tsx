@@ -179,7 +179,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       setIsProcessing(true);
       recordTap();
 
-      // Create bubble animation
+      // Create bubble animation (visual feedback while processing)
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
@@ -188,24 +188,29 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       };
       setBubbles((prev) => [...prev, newBubble]);
 
-      // Optimistic UI update
-      setLocalTaps((prev) => Math.max(0, prev - 1));
-
       try {
-        // Send tap transaction via burner wallet
-        await sendTap();
+        // Send tap transaction via burner wallet and WAIT for confirmation
+        const tx = await sendTap();
         
-        // Call success callback for optimistic update
+        // Wait for transaction to be mined (1 confirmation)
+        await tx.wait();
+        
+        // Transaction confirmed! Now fetch updated stats from contract
+        const result = await refetchGameStats();
+        
+        // Update local state from contract data
+        if (result.data) {
+          const data = result.data as [bigint, bigint, bigint, string];
+          setLocalTaps(Number(data[0]));
+        }
+        
+        // Call success callback
         if (onTapSuccess) {
           onTapSuccess();
         }
 
-        // Update state from contract after 2 seconds
-        setTimeout(() => {
-          refetchGameStats();
-          // Schedule Supabase sync (debounced - max once per 5 sec)
-          scheduleSync();
-        }, 2000);
+        // Schedule Supabase sync (debounced)
+        scheduleSync();
       } catch (err) {
         console.error('Tap error:', err);
         
@@ -221,9 +226,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         } else {
           setError('Tap failed. Try again.');
         }
-
-        // Rollback optimistic update
-        setLocalTaps((prev) => prev + 1);
+        
+        // No rollback needed - we didn't optimistically update
       } finally {
         setIsProcessing(false);
         completeTap();

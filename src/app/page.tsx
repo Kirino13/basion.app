@@ -37,24 +37,15 @@ function ReferralHandler() {
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
-  const { tapBalance, points: contractPoints } = useBasionContract();
+  const { tapBalance, points, refetchGameStats } = useBasionContract();
   const { generateReferralLink } = useReferral();
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
-  const [localPoints, setLocalPoints] = useState(0);
   
-  // Sync local points with contract on load
-  useEffect(() => {
-    setLocalPoints(contractPoints);
-  }, [contractPoints]);
-  
-  // Optimistic points update on tap
+  // Refetch stats when tap succeeds (blockchain confirmed)
   const handleTapSuccess = useCallback(() => {
-    setLocalPoints(prev => prev + 1);
-  }, []);
-  
-  // Use local points for display (optimistic)
-  const points = localPoints;
+    refetchGameStats();
+  }, [refetchGameStats]);
 
   const handleInvite = async () => {
     if (!address) return;
