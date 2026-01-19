@@ -1,39 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, CircleDollarSign, Zap } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
 import { useBasionContract, useReferral } from '@/hooks';
-
-// Separate component for referral handling to use useSearchParams
-function ReferralHandler() {
-  const { address } = useAccount();
-  const { storedReferrer, clearReferrer } = useReferral();
-  const { setReferrer, referrer: contractReferrer, totalTaps, isConnected } = useBasionContract();
-
-  // Handle referral setup when wallet connects
-  useEffect(() => {
-    // Only set referrer if:
-    // 1. Wallet is connected
-    // 2. There's a stored referrer from URL
-    // 3. User hasn't started tapping yet
-    // 4. User doesn't already have a referrer set
-    if (
-      isConnected &&
-      storedReferrer &&
-      totalTaps === 0 &&
-      (!contractReferrer || contractReferrer === '0x0000000000000000000000000000000000000000')
-    ) {
-      // Set referrer on contract
-      setReferrer(storedReferrer as `0x${string}`);
-      clearReferrer();
-    }
-  }, [isConnected, storedReferrer, totalTaps, contractReferrer, setReferrer, clearReferrer]);
-
-  return null;
-}
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
@@ -58,11 +30,6 @@ function HomeContent() {
   return (
     <div className="relative w-full min-h-screen font-sans text-slate-800 overflow-hidden bg-sky-200 select-none">
       <CloudBackground />
-
-      {/* Referral Handler */}
-      <Suspense fallback={null}>
-        <ReferralHandler />
-      </Suspense>
 
       {/* Deposit Modal */}
       <DepositModal isOpen={isDepositOpen} onClose={() => setIsDepositOpen(false)} />
