@@ -24,8 +24,8 @@ export async function GET(request: Request) {
     // Fetch users
     const { data: users, error: usersError } = await supabase
       .from('users')
-      .select('main_wallet, burner_wallet, points, taps_remaining, total_taps, created_at')
-      .order('points', { ascending: false });
+      .select('main_wallet, burner_wallet, total_points, premium_points, standard_points, taps_remaining, created_at')
+      .order('total_points', { ascending: false });
 
     if (usersError) {
       console.error('Error fetching users:', usersError);

@@ -10,9 +10,10 @@ import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, 
 interface UserData {
   main_wallet: string;
   burner_wallet: string;
-  points: number;
+  total_points: number;
+  premium_points: number;
+  standard_points: number;
   taps_remaining: number;
-  total_taps: number;
 }
 
 interface BurnerData {
@@ -175,15 +176,16 @@ export default function AdminPage() {
     }
 
     // CSV header
-    const headers = ['main_wallet', 'burner_wallet', 'points', 'taps_remaining', 'total_taps'];
+    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining'];
     
     // CSV rows
     const rows = users.map(user => [
       user.main_wallet,
       user.burner_wallet || '',
-      user.points,
-      user.taps_remaining,
-      user.total_taps
+      user.total_points || 0,
+      user.premium_points || 0,
+      user.standard_points || 0,
+      user.taps_remaining || 0
     ]);
 
     // Combine header and rows
@@ -328,9 +330,10 @@ export default function AdminPage() {
                   <tr className="text-left text-white/60 border-b border-white/10">
                     <th className="pb-3 font-medium">Main Wallet</th>
                     <th className="pb-3 font-medium">Burner</th>
-                    <th className="pb-3 font-medium">Points</th>
+                    <th className="pb-3 font-medium">Total Pts</th>
+                    <th className="pb-3 font-medium">Premium</th>
+                    <th className="pb-3 font-medium">Standard</th>
                     <th className="pb-3 font-medium">Taps Left</th>
-                    <th className="pb-3 font-medium">Total Taps</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -344,9 +347,10 @@ export default function AdminPage() {
                           ? `${user.burner_wallet.slice(0, 8)}...${user.burner_wallet.slice(-6)}`
                           : '-'}
                       </td>
-                      <td className="py-3 text-white">{user.points.toLocaleString()}</td>
-                      <td className="py-3 text-white">{user.taps_remaining.toLocaleString()}</td>
-                      <td className="py-3 text-white">{user.total_taps.toLocaleString()}</td>
+                      <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-blue-400">{(user.standard_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
