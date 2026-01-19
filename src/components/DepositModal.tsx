@@ -214,11 +214,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                   ))}
                 </div>
 
-                <div className="text-center text-white/60 mb-4 space-y-1">
+                <div className="text-center text-white/60 mb-4">
                   <p>Price: <span className="text-white font-bold">{ethAmount} ETH</span></p>
-                  <p className="text-xs text-white/40">
-                    70% for tap gas • 30% platform fee
-                  </p>
                 </div>
 
                 <button
@@ -257,9 +254,6 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
             <p className="text-white text-lg">Processing deposit...</p>
             <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet (2/2)</p>
-            <p className="text-white/40 text-xs mt-4">
-              70% will be sent to your tap wallet for gas
-            </p>
           </div>
         );
 
