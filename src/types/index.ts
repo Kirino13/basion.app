@@ -18,28 +18,34 @@ export interface GameState {
   tapBalance: number;
 }
 
+// Updated for BasionV2 contract
 export interface UserStats {
   mainWallet: string;
   burnerWallet?: string;
   tapsRemaining: number;
-  points: number;
-  totalTaps: number;
+  premiumPoints: number;
+  standardPoints: number;
+  totalPoints: number;
+  pointsMultiplier: number;
   referrer?: string;
-  referralActive: boolean;
-  referralBonus: number;
-  referralCount: number;
+  isBlacklisted: boolean;
+  airdropClaimed: boolean;
 }
 
-export interface GameStats {
-  tapBalance: bigint;
-  points: bigint;
-  totalTaps: bigint;
+// Contract view function returns
+export interface PointsData {
+  premium: bigint;
+  standard: bigint;
+  total: bigint;
+}
+
+export interface UserInfo {
+  taps: bigint;
+  multiplier: bigint;
   burner: string;
 }
 
-export interface ReferralStats {
+export interface ReferralInfo {
   referrer: string;
-  isActive: boolean;
-  bonus: bigint;
-  count: bigint;
+  isBatchMode: boolean;
 }

@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const ReferralLink: React.FC = () => {
   const { address } = useAccount();
   const { generateReferralLink } = useReferral();
-  const { referralActive, referralBonus, referralCount } = useBasionContract();
+  const { referrer, pointsMultiplier } = useBasionContract();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -23,6 +23,12 @@ const ReferralLink: React.FC = () => {
 
   if (!address) return null;
 
+  // Check if user has a referrer (was invited)
+  const hasReferrer = referrer && referrer !== '0x0000000000000000000000000000000000000000';
+  // Check if user has a boost
+  const hasBoost = pointsMultiplier > 100;
+  const boostPercent = hasBoost ? Math.round((pointsMultiplier - 100) / 100 * 100) : 0;
+
   return (
     <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/50">
       <div className="flex items-center gap-3 mb-3">
@@ -33,20 +39,18 @@ const ReferralLink: React.FC = () => {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-4">
         <div className="text-center p-2 bg-white/50 rounded-lg">
-          <p className="text-lg font-bold text-[#0B1B3A]">{referralCount}</p>
-          <p className="text-xs text-gray-500">Invited</p>
-        </div>
-        <div className="text-center p-2 bg-white/50 rounded-lg">
-          <p className="text-lg font-bold text-[#0052FF]">+{referralBonus}</p>
-          <p className="text-xs text-gray-500">Bonus</p>
-        </div>
-        <div className="text-center p-2 bg-white/50 rounded-lg">
-          <p className={`text-lg font-bold ${referralActive ? 'text-green-500' : 'text-gray-400'}`}>
-            {referralActive ? 'Active' : 'Inactive'}
+          <p className={`text-lg font-bold ${hasBoost ? 'text-[#0052FF]' : 'text-gray-400'}`}>
+            {hasBoost ? `+${boostPercent}%` : 'None'}
           </p>
-          <p className="text-xs text-gray-500">Status</p>
+          <p className="text-xs text-gray-500">Your Boost</p>
+        </div>
+        <div className="text-center p-2 bg-white/50 rounded-lg">
+          <p className={`text-lg font-bold ${hasReferrer ? 'text-green-500' : 'text-gray-400'}`}>
+            {hasReferrer ? 'Yes' : 'No'}
+          </p>
+          <p className="text-xs text-gray-500">Invited</p>
         </div>
       </div>
 
@@ -81,7 +85,7 @@ const ReferralLink: React.FC = () => {
       </button>
 
       <p className="text-xs text-center text-gray-500 mt-2">
-        Earn bonus points when friends tap!
+        Invite friends and both get bonus boosts!
       </p>
     </div>
   );
