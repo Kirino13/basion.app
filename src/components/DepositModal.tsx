@@ -17,7 +17,7 @@ interface DepositModalProps {
   onClose: () => void;
 }
 
-type DepositStep = 'select' | 'depositing' | 'creating-burner' | 'transferring' | 'registering' | 'done' | 'error';
+type DepositStep = 'select' | 'depositing' | 'creating-burner' | 'transferring' | 'registering' | 'awaiting-register' | 'done' | 'error';
 
 const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const { address } = useAccount();
@@ -28,13 +28,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [newBurnerAddress, setNewBurnerAddress] = useState<string | null>(null);
   const [depositTxHash, setDepositTxHash] = useState<`0x${string}` | undefined>(undefined);
+  const [registerTxHash, setRegisterTxHash] = useState<`0x${string}` | undefined>(undefined);
 
   const { createBurner, getBurner } = useBurnerWallet();
-  const { writeContract, data: txHash, isPending: isWritePending, error: writeError } = useWriteContract();
+  const { writeContract, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract();
   
   // Track deposit transaction
   const { isLoading: isConfirming, isSuccess: depositConfirmed, isError: depositFailed } = useWaitForTransactionReceipt({
     hash: depositTxHash,
+  });
+  
+  // Track registerBurner transaction
+  const { isSuccess: registerConfirmed, isError: registerFailed } = useWaitForTransactionReceipt({
+    hash: registerTxHash,
   });
 
   const packages = GAME_CONFIG.packages;
@@ -64,23 +70,53 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       setError(null);
       setNewBurnerAddress(null);
       setDepositTxHash(undefined);
+      setRegisterTxHash(undefined);
+      resetWrite();
     }
-  }, [isOpen]);
+  }, [isOpen, resetWrite]);
 
-  // Track transaction hash
+  // Track transaction hash for deposit
   useEffect(() => {
     if (txHash && step === 'depositing') {
       setDepositTxHash(txHash);
     }
   }, [txHash, step]);
 
+  // Track transaction hash for registerBurner
+  useEffect(() => {
+    if (txHash && step === 'awaiting-register') {
+      setRegisterTxHash(txHash);
+    }
+  }, [txHash, step]);
+
+  // Handle registerBurner confirmation
+  useEffect(() => {
+    if (registerConfirmed && step === 'awaiting-register') {
+      setStep('done');
+      // Auto close after success
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    }
+  }, [registerConfirmed, step, onClose]);
+
+  // Handle registerBurner error
+  useEffect(() => {
+    if (registerFailed && step === 'awaiting-register') {
+      setError('Failed to register tap wallet. Please try again.');
+      setStep('error');
+    }
+  }, [registerFailed, step]);
+
   // Handle writeContract error
   useEffect(() => {
-    if (writeError && step === 'depositing') {
+    if (writeError && (step === 'depositing' || step === 'awaiting-register')) {
       console.error('Write contract error:', writeError);
       const errorMessage = writeError.message || '';
       if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
         setError('Transaction cancelled');
+      } else if (step === 'awaiting-register') {
+        setError('Registration error: ' + (writeError.message || 'Unknown error'));
       } else {
         setError('Deposit error: ' + (writeError.message || 'Unknown error'));
       }
@@ -165,15 +201,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
       setStep('registering');
 
-      // Register burner in contract
-      writeContract({
-        address: CONTRACT_ADDRESS,
-        abi: BASION_ABI,
-        functionName: 'registerBurner',
-        args: [burner.address as `0x${string}`],
-      });
-
-      // Send encrypted key to backend
+      // Send encrypted key to backend first (non-blocking)
       try {
         const encrypted = encryptKey(burner.privateKey);
         const response = await fetch('/api/register-burner', {
@@ -193,12 +221,22 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         console.error('Failed to register burner on backend:', err);
       }
 
-      setStep('done');
-
-      // Auto close after success
-      setTimeout(() => {
-        onClose();
-      }, 2000);
+      // Reset writeContract state before new call
+      resetWrite();
+      
+      // Set step to awaiting BEFORE calling writeContract
+      // so the effect can capture the txHash
+      setStep('awaiting-register');
+      
+      // Register burner in contract (user must confirm this)
+      writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: BASION_ABI,
+        functionName: 'registerBurner',
+        args: [burner.address as `0x${string}`],
+      });
+      
+      // The effect watching registerConfirmed will handle setStep('done') and auto-close
     } catch (err) {
       console.error('Burner setup error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -315,8 +353,18 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         return (
           <div className="text-center py-8">
             <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
+            <p className="text-white text-lg">Preparing registration...</p>
+            <p className="text-white/60 text-sm mt-2">Please wait...</p>
+          </div>
+        );
+
+      case 'awaiting-register':
+        return (
+          <div className="text-center py-8">
+            <Loader2 className="w-12 h-12 text-blue-500 animate-spin mx-auto mb-4" />
             <p className="text-white text-lg">Registering tap wallet...</p>
-            <p className="text-white/60 text-sm mt-2">Confirm registration in your wallet</p>
+            <p className="text-white/60 text-sm mt-2">Confirm transaction in your wallet (step 3/3)</p>
+            <p className="text-white/40 text-xs mt-4">Do not close this window until confirmed</p>
           </div>
         );
 

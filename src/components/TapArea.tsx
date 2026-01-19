@@ -8,11 +8,13 @@ import FloatingBubble from './FloatingBubble';
 
 interface TapAreaProps {
   onOpenDeposit: () => void;
+  onTapSuccess?: () => void;
 }
 
-const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
+const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
   const [localTaps, setLocalTaps] = useState(0);
+  const [localPoints, setLocalPoints] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
@@ -90,14 +92,31 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
     }
   }, [address, hasSynced, points, totalTaps, tapBalance]);
 
-  // Cleanup timer on unmount
+  // Cleanup timer on unmount and sync on page unload
   useEffect(() => {
+    // Sync data when page becomes hidden (user switches tab or closes)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && address) {
+        // Use sendBeacon for reliable sync on page hide
+        const data = JSON.stringify({
+          mainWallet: address,
+          points: points,
+          totalTaps: totalTaps,
+          tapBalance: localTaps,
+        });
+        navigator.sendBeacon('/api/sync-user', new Blob([data], { type: 'application/json' }));
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, []);
+  }, [address, points, totalTaps, localTaps]);
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -175,6 +194,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit }) => {
       try {
         // Send tap transaction via burner wallet
         await sendTap();
+        
+        // Call success callback for optimistic update
+        if (onTapSuccess) {
+          onTapSuccess();
+        }
 
         // Update state from contract after 2 seconds
         setTimeout(() => {

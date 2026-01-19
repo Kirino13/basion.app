@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, CircleDollarSign, Zap } from 'lucide-react';
 import { useAccount } from 'wagmi';
@@ -37,10 +37,24 @@ function ReferralHandler() {
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
-  const { tapBalance, points } = useBasionContract();
+  const { tapBalance, points: contractPoints } = useBasionContract();
   const { generateReferralLink } = useReferral();
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const [localPoints, setLocalPoints] = useState(0);
+  
+  // Sync local points with contract on load
+  useEffect(() => {
+    setLocalPoints(contractPoints);
+  }, [contractPoints]);
+  
+  // Optimistic points update on tap
+  const handleTapSuccess = useCallback(() => {
+    setLocalPoints(prev => prev + 1);
+  }, []);
+  
+  // Use local points for display (optimistic)
+  const points = localPoints;
 
   const handleInvite = async () => {
     if (!address) return;
@@ -69,14 +83,13 @@ function HomeContent() {
           <div className="flex flex-col items-center gap-6 w-full max-w-xl mb-12">
             {/* The Main Tap Area */}
             {isConnected ? (
-              <TapArea onOpenDeposit={() => setIsDepositOpen(true)} />
+              <TapArea onOpenDeposit={() => setIsDepositOpen(true)} onTapSuccess={handleTapSuccess} />
             ) : (
               <div className="flex flex-col items-center gap-6">
-                {/* Placeholder - entire white block visible */}
-                <div className="relative w-64 h-64 lg:w-72 lg:h-72 bg-white/60 rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)] flex items-center justify-center">
+                {/* Placeholder - entire white block visible, no text */}
+                <div className="relative w-64 h-64 lg:w-72 lg:h-72 bg-white/60 rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)]">
                   {/* Blue square inside */}
                   <div className="absolute inset-[70px] bg-[rgba(0,0,255,0.5)] rounded-[16px]" />
-                  <span className="text-white/80 text-lg font-bold relative z-10">Connect to Play</span>
                 </div>
               </div>
             )}
