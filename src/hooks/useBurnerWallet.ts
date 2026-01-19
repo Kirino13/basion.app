@@ -235,14 +235,14 @@ export function useBurnerWallet() {
 
   // Send tap transaction via burner wallet
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
-    const burner = getBurner();
-    if (!burner) {
+    const burnerData = getBurner();
+    if (!burnerData) {
       throw new Error('No burner wallet found. Please complete deposit first.');
     }
 
     const provider = getProvider();
     
-    const balance = await provider.getBalance(burner.address);
+    const balance = await provider.getBalance(burnerData.address);
     const feeData = await provider.getFeeData();
     const estimatedGas = 50000n;
     const gasCost = estimatedGas * (feeData.gasPrice || 0n);
@@ -251,28 +251,29 @@ export function useBurnerWallet() {
       throw new Error(`Insufficient gas. Balance: ${ethers.formatEther(balance)} ETH, need: ${ethers.formatEther(gasCost)} ETH`);
     }
 
-    const signer = burner.connect(provider);
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, signer);
+    // Create wallet from private key and connect to provider
+    const wallet = new ethers.Wallet(burnerData.privateKey, provider);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, wallet);
 
     const tx = await contract.tap();
     return tx;
   }, [getBurner]);
 
-  // Send multiple taps at once
+  // Send multiple taps at once (for batch mode)
   const sendTapMultiple = useCallback(
     async (count: number): Promise<ethers.TransactionResponse> => {
       if (count <= 0 || count > 100) {
         throw new Error('Tap count must be between 1 and 100');
       }
 
-      const burner = getBurner();
-      if (!burner) {
+      const burnerData = getBurner();
+      if (!burnerData) {
         throw new Error('No burner wallet found. Please complete deposit first.');
       }
 
       const provider = getProvider();
       
-      const balance = await provider.getBalance(burner.address);
+      const balance = await provider.getBalance(burnerData.address);
       const feeData = await provider.getFeeData();
       const estimatedGas = BigInt(50000 + count * 5000);
       const gasCost = estimatedGas * (feeData.gasPrice || 0n);
@@ -281,10 +282,11 @@ export function useBurnerWallet() {
         throw new Error(`Insufficient gas for ${count} taps`);
       }
 
-      const signer = burner.connect(provider);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, signer);
+      // Create wallet from private key and connect to provider
+      const wallet = new ethers.Wallet(burnerData.privateKey, provider);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, wallet);
 
-      const tx = await contract.tapMultiple(count);
+      const tx = await contract.batchTap(count);
       return tx;
     },
     [getBurner]
