@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useAccount } from 'wagmi';
-import { STORAGE_KEYS, RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
+import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 import { encryptKey } from '@/lib/encryption';
 
@@ -16,23 +16,51 @@ function getProvider(): ethers.JsonRpcProvider {
   return cachedProvider;
 }
 
-// Flag to prevent double sync
-let hasSyncedBurner = false;
+// Track which wallets we've synced to prevent duplicates
+const syncedWallets = new Set<string>();
+
+// Helper to get wallet-specific storage keys
+function getStorageKeys(walletAddress: string) {
+  const normalized = walletAddress.toLowerCase();
+  return {
+    burnerKey: `basion_burner_key_${normalized}`,
+    burnerAddress: `basion_burner_address_${normalized}`,
+  };
+}
 
 export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
   const { address: mainWallet } = useAccount();
-  
-  // Note: Burner wallet is NOT cleared on wallet switch
-  // The burner is tied to the wallet that created it via contract registration
-  // If user switches wallets, they just need to reconnect - burner stays in localStorage
 
-  // Sync burner with backend (once per session)
-  const syncBurnerToBackend = useCallback(async (burnerAddr: string, privateKey: string, mainAddr: string) => {
-    if (hasSyncedBurner) return; // Prevent re-sync
-    hasSyncedBurner = true;
+  // Load burner for current wallet when wallet changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     
+    // Reset state when no wallet connected
+    if (!mainWallet) {
+      setBurnerAddress(null);
+      setHasBurner(false);
+      return;
+    }
+
+    // Get wallet-specific storage keys
+    const keys = getStorageKeys(mainWallet);
+    const address = localStorage.getItem(keys.burnerAddress);
+    const key = localStorage.getItem(keys.burnerKey);
+    
+    setBurnerAddress(address);
+    setHasBurner(!!key && !!address);
+    
+    // Sync to backend if not already synced for this wallet
+    if (address && key && !syncedWallets.has(mainWallet.toLowerCase())) {
+      syncedWallets.add(mainWallet.toLowerCase());
+      syncBurnerToBackend(address, key, mainWallet);
+    }
+  }, [mainWallet]);
+
+  // Sync burner with backend
+  const syncBurnerToBackend = async (burnerAddr: string, privateKey: string, mainAddr: string) => {
     try {
       const encryptedKey = encryptKey(privateKey);
       
@@ -46,50 +74,41 @@ export function useBurnerWallet() {
         }),
       });
     } catch (err) {
-      hasSyncedBurner = false; // Reset flag on error for retry
+      // Remove from synced set so we retry next time
+      syncedWallets.delete(mainAddr.toLowerCase());
       console.error('Failed to sync burner to backend:', err);
     }
-  }, []);
+  };
 
-  // Check existing burner on mount and sync
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const address = localStorage.getItem(STORAGE_KEYS.burnerAddress);
-      const key = localStorage.getItem(STORAGE_KEYS.burnerKey);
-      setBurnerAddress(address);
-      setHasBurner(!!key && !!address);
-      
-      // If burner exists and mainWallet present - sync with backend
-      if (address && key && mainWallet) {
-        syncBurnerToBackend(address, key, mainWallet);
-      }
-    }
-  }, [mainWallet, syncBurnerToBackend]);
-
-  // Create new burner wallet
-  // Returns HDNodeWallet (ethers v6: createRandom returns HDNodeWallet)
+  // Create new burner wallet for current mainWallet
   const createBurner = useCallback((): ethers.HDNodeWallet => {
     if (typeof window === 'undefined') {
       throw new Error('Cannot create burner wallet on server');
     }
+    if (!mainWallet) {
+      throw new Error('No wallet connected');
+    }
 
     const wallet = ethers.Wallet.createRandom();
+    const keys = getStorageKeys(mainWallet);
 
-    // Save to localStorage
-    localStorage.setItem(STORAGE_KEYS.burnerKey, wallet.privateKey);
-    localStorage.setItem(STORAGE_KEYS.burnerAddress, wallet.address);
+    // Save to wallet-specific localStorage keys
+    localStorage.setItem(keys.burnerKey, wallet.privateKey);
+    localStorage.setItem(keys.burnerAddress, wallet.address);
 
     setBurnerAddress(wallet.address);
     setHasBurner(true);
 
     return wallet;
-  }, []);
+  }, [mainWallet]);
 
-  // Get existing burner wallet
+  // Get existing burner wallet for current mainWallet
   const getBurner = useCallback((): ethers.Wallet | null => {
     if (typeof window === 'undefined') return null;
+    if (!mainWallet) return null;
 
-    const privateKey = localStorage.getItem(STORAGE_KEYS.burnerKey);
+    const keys = getStorageKeys(mainWallet);
+    const privateKey = localStorage.getItem(keys.burnerKey);
     if (!privateKey) return null;
 
     try {
@@ -97,30 +116,35 @@ export function useBurnerWallet() {
     } catch (err) {
       console.error('Invalid burner key in localStorage:', err);
       // Remove invalid key
-      localStorage.removeItem(STORAGE_KEYS.burnerKey);
-      localStorage.removeItem(STORAGE_KEYS.burnerAddress);
+      localStorage.removeItem(keys.burnerKey);
+      localStorage.removeItem(keys.burnerAddress);
       setBurnerAddress(null);
       setHasBurner(false);
       return null;
     }
-  }, []);
+  }, [mainWallet]);
 
   // Get burner address without loading full wallet
   const getBurnerAddress = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEYS.burnerAddress);
-  }, []);
+    if (!mainWallet) return null;
+    
+    const keys = getStorageKeys(mainWallet);
+    return localStorage.getItem(keys.burnerAddress);
+  }, [mainWallet]);
 
-  // Clear burner wallet (on logout/reset)
+  // Clear burner wallet for current mainWallet
   const clearBurner = useCallback((): void => {
     if (typeof window === 'undefined') return;
+    if (!mainWallet) return;
 
-    localStorage.removeItem(STORAGE_KEYS.burnerKey);
-    localStorage.removeItem(STORAGE_KEYS.burnerAddress);
+    const keys = getStorageKeys(mainWallet);
+    localStorage.removeItem(keys.burnerKey);
+    localStorage.removeItem(keys.burnerAddress);
 
     setBurnerAddress(null);
     setHasBurner(false);
-  }, []);
+  }, [mainWallet]);
 
   // Send tap transaction via burner wallet
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
@@ -134,7 +158,7 @@ export function useBurnerWallet() {
     // Check balance before sending
     const balance = await provider.getBalance(burner.address);
     const feeData = await provider.getFeeData();
-    const estimatedGas = 50000n; // Approximate gas estimate for tap()
+    const estimatedGas = 50000n;
     const gasCost = estimatedGas * (feeData.gasPrice || 0n);
     
     if (balance < gasCost) {
@@ -162,10 +186,9 @@ export function useBurnerWallet() {
 
       const provider = getProvider();
       
-      // Check balance
       const balance = await provider.getBalance(burner.address);
       const feeData = await provider.getFeeData();
-      const estimatedGas = BigInt(50000 + count * 5000); // More gas for multi-tap
+      const estimatedGas = BigInt(50000 + count * 5000);
       const gasCost = estimatedGas * (feeData.gasPrice || 0n);
       
       if (balance < gasCost) {
