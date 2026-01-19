@@ -18,7 +18,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Store burner key
+    // Store burner key - UPSERT on main_wallet to ensure ONE burner per wallet
+    // If user already has a burner, this will update it (handles race conditions)
     const { error: keyError } = await supabase.from('burner_keys').upsert(
       {
         main_wallet: mainWallet.toLowerCase(),
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
         encrypted_key: encryptedKey,
       },
       {
-        onConflict: 'burner_wallet',
+        onConflict: 'main_wallet',
       }
     );
 

@@ -5,7 +5,7 @@ import { ethers } from 'ethers';
 import { useAccount } from 'wagmi';
 import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
-import { encryptKey } from '@/lib/encryption';
+import { encryptKey, decryptKey } from '@/lib/encryption';
 
 // Cached provider - created once
 let cachedProvider: ethers.JsonRpcProvider | null = null;
@@ -16,8 +16,8 @@ function getProvider(): ethers.JsonRpcProvider {
   return cachedProvider;
 }
 
-// Track which wallets we've synced to prevent duplicates
-const syncedWallets = new Set<string>();
+// Track which wallets we've checked to prevent duplicate API calls
+const checkedWallets = new Set<string>();
 
 // Helper to get wallet-specific storage keys
 function getStorageKeys(walletAddress: string) {
@@ -31,9 +31,10 @@ function getStorageKeys(walletAddress: string) {
 export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const { address: mainWallet } = useAccount();
 
-  // Load burner for current wallet when wallet changes
+  // Load or restore burner for current wallet
   useEffect(() => {
     if (typeof window === 'undefined') return;
     
@@ -44,39 +45,95 @@ export function useBurnerWallet() {
       return;
     }
 
-    // Get wallet-specific storage keys
     const keys = getStorageKeys(mainWallet);
-    const address = localStorage.getItem(keys.burnerAddress);
-    const key = localStorage.getItem(keys.burnerKey);
     
-    setBurnerAddress(address);
-    setHasBurner(!!key && !!address);
+    // Check localStorage first
+    const localKey = localStorage.getItem(keys.burnerKey);
+    const localAddress = localStorage.getItem(keys.burnerAddress);
     
-    // Sync to backend if not already synced for this wallet
-    if (address && key && !syncedWallets.has(mainWallet.toLowerCase())) {
-      syncedWallets.add(mainWallet.toLowerCase());
-      syncBurnerToBackend(address, key, mainWallet);
+    if (localKey && localAddress) {
+      // Burner exists locally
+      setBurnerAddress(localAddress);
+      setHasBurner(true);
+      return;
     }
+
+    // No local burner - try to restore from Supabase
+    // Only check once per wallet per session
+    if (checkedWallets.has(mainWallet.toLowerCase())) {
+      setBurnerAddress(null);
+      setHasBurner(false);
+      return;
+    }
+
+    // Mark as checked to prevent duplicate API calls
+    checkedWallets.add(mainWallet.toLowerCase());
+    
+    // Try to restore from backend
+    setIsRestoring(true);
+    restoreBurnerFromBackend(mainWallet, keys)
+      .then(restored => {
+        if (restored) {
+          setBurnerAddress(restored.address);
+          setHasBurner(true);
+        } else {
+          setBurnerAddress(null);
+          setHasBurner(false);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to restore burner:', err);
+        setBurnerAddress(null);
+        setHasBurner(false);
+      })
+      .finally(() => {
+        setIsRestoring(false);
+      });
   }, [mainWallet]);
 
-  // Sync burner with backend
-  const syncBurnerToBackend = async (burnerAddr: string, privateKey: string, mainAddr: string) => {
+  // Restore burner from Supabase
+  const restoreBurnerFromBackend = async (
+    wallet: string, 
+    keys: { burnerKey: string; burnerAddress: string }
+  ): Promise<{ address: string; privateKey: string } | null> => {
     try {
-      const encryptedKey = encryptKey(privateKey);
+      const res = await fetch(`/api/get-burner?wallet=${wallet}`);
       
-      await fetch('/api/register-burner', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mainWallet: mainAddr,
-          burnerWallet: burnerAddr,
-          encryptedKey,
-        }),
-      });
+      if (!res.ok) {
+        return null;
+      }
+      
+      const data = await res.json();
+      
+      if (!data.exists || !data.encryptedKey) {
+        return null;
+      }
+      
+      // Decrypt the key
+      const privateKey = decryptKey(data.encryptedKey);
+      
+      // Validate the key by creating a wallet
+      const wallet_obj = new ethers.Wallet(privateKey);
+      
+      // Verify address matches
+      if (wallet_obj.address.toLowerCase() !== data.burnerAddress.toLowerCase()) {
+        console.error('Burner address mismatch after decryption');
+        return null;
+      }
+      
+      // Save to localStorage
+      localStorage.setItem(keys.burnerKey, privateKey);
+      localStorage.setItem(keys.burnerAddress, data.burnerAddress);
+      
+      console.log('Burner wallet restored from backend');
+      
+      return {
+        address: data.burnerAddress,
+        privateKey: privateKey,
+      };
     } catch (err) {
-      // Remove from synced set so we retry next time
-      syncedWallets.delete(mainAddr.toLowerCase());
-      console.error('Failed to sync burner to backend:', err);
+      console.error('Error restoring burner from backend:', err);
+      return null;
     }
   };
 
@@ -115,7 +172,6 @@ export function useBurnerWallet() {
       return new ethers.Wallet(privateKey);
     } catch (err) {
       console.error('Invalid burner key in localStorage:', err);
-      // Remove invalid key
       localStorage.removeItem(keys.burnerKey);
       localStorage.removeItem(keys.burnerAddress);
       setBurnerAddress(null);
@@ -146,6 +202,27 @@ export function useBurnerWallet() {
     setHasBurner(false);
   }, [mainWallet]);
 
+  // Register burner with backend (called after creating new burner)
+  const registerBurnerWithBackend = useCallback(async (burnerAddr: string, privateKey: string): Promise<void> => {
+    if (!mainWallet) return;
+    
+    try {
+      const encrypted = encryptKey(privateKey);
+      
+      await fetch('/api/register-burner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mainWallet: mainWallet,
+          burnerWallet: burnerAddr,
+          encryptedKey: encrypted,
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to register burner with backend:', err);
+    }
+  }, [mainWallet]);
+
   // Send tap transaction via burner wallet
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burner = getBurner();
@@ -155,7 +232,6 @@ export function useBurnerWallet() {
 
     const provider = getProvider();
     
-    // Check balance before sending
     const balance = await provider.getBalance(burner.address);
     const feeData = await provider.getFeeData();
     const estimatedGas = 50000n;
@@ -222,10 +298,12 @@ export function useBurnerWallet() {
   return {
     burnerAddress,
     hasBurner,
+    isRestoring,
     createBurner,
     getBurner,
     getBurnerAddress,
     clearBurner,
+    registerBurnerWithBackend,
     sendTap,
     sendTapMultiple,
     getBurnerBalance,

@@ -9,7 +9,6 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagm
 import { CONTRACT_ADDRESS, GAME_CONFIG } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 import { useBurnerWallet } from '@/hooks';
-import { encryptKey } from '@/lib/encryption';
 import { getEthPrice, usdToEth } from '@/lib/price';
 
 interface DepositModalProps {
@@ -30,7 +29,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const [depositTxHash, setDepositTxHash] = useState<`0x${string}` | undefined>(undefined);
   const [registerTxHash, setRegisterTxHash] = useState<`0x${string}` | undefined>(undefined);
 
-  const { createBurner, getBurner } = useBurnerWallet();
+  const { createBurner, getBurner, registerBurnerWithBackend } = useBurnerWallet();
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract();
   
   // Track deposit transaction
@@ -173,13 +172,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
     try {
       setStep('creating-burner');
 
-      // Check if burner exists, if yes - use it
+      // Check if burner exists (either local or restored from Supabase)
       const existingBurner = getBurner();
+      const isNewBurner = !existingBurner;
       const burner = existingBurner || createBurner();
       setNewBurnerAddress(burner.address);
 
       // Fixed amount for burner gas (0.0005 ETH ~ $1.50 for ~300 taps gas)
-      // This is separate from the tap package - just gas money
       const BURNER_GAS_ETH = '0.0005';
       const forBurner = parseEther(BURNER_GAS_ETH);
 
@@ -190,7 +189,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
       setStep('transferring');
 
-      // Transfer ETH to burner
+      // Transfer ETH to burner (always needed for gas top-up)
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
 
@@ -202,34 +201,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
 
       setStep('registering');
 
-      // Send encrypted key to backend first (non-blocking)
-      try {
-        const encrypted = encryptKey(burner.privateKey);
-        const response = await fetch('/api/register-burner', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mainWallet: address,
-            burnerWallet: burner.address,
-            encryptedKey: encrypted,
-          }),
-        });
-        
-        if (!response.ok) {
-          console.error('Backend registration failed:', await response.text());
-        }
-      } catch (err) {
-        console.error('Failed to register burner on backend:', err);
+      // Only register NEW burners with backend (existing ones are already there)
+      if (isNewBurner) {
+        await registerBurnerWithBackend(burner.address, burner.privateKey);
       }
 
       // Reset writeContract state before new call
       resetWrite();
       
       // Set step to awaiting BEFORE calling writeContract
-      // so the effect can capture the txHash
       setStep('awaiting-register');
       
       // Register burner in contract (user must confirm this)
+      // Even for existing burners - might need to re-register if contract state is different
       writeContract({
         address: CONTRACT_ADDRESS,
         abi: BASION_ABI,
@@ -249,7 +233,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
       }
       setStep('error');
     }
-  }, [address, ethPrice, ethAmount, getBurner, createBurner, writeContract, onClose]);
+  }, [address, ethPrice, getBurner, createBurner, registerBurnerWithBackend, writeContract, resetWrite]);
 
   const getStepContent = () => {
     switch (step) {

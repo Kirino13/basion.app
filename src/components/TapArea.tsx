@@ -23,7 +23,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
 
-  const { hasBurner, sendTap } = useBurnerWallet();
+  const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
   const { tapBalance, points, totalTaps, isConnected, address, refetchGameStats } = useBasionContract();
 
@@ -236,7 +236,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync]
   );
 
-  const isDisabled = !isConnected || !hasBurner || localTaps <= 0;
+  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
@@ -258,6 +258,17 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           className="absolute inset-[70px] bg-[#0000FF] rounded-[16px] pointer-events-none"
         />
       </motion.div>
+
+      {/* Restoring indicator */}
+      {isRestoring && (
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-blue-600 text-sm bg-blue-50/80 px-4 py-2 rounded-lg"
+        >
+          Restoring tap wallet...
+        </motion.p>
+      )}
 
       {/* Error message */}
       {error && (
