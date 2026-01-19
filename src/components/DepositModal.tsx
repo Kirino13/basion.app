@@ -38,8 +38,20 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
   const packages = GAME_CONFIG.packages;
   const selectedPkg = packages[selectedPackage];
   
-  // Price in ETH from config
-  const ethAmount = selectedPkg.priceEth;
+  // Calculate ETH amount dynamically from USD price
+  // Add 1% buffer for price fluctuation between calculation and transaction
+  const calculateEthAmount = (usdPrice: number, ethPriceUsd: number | null): string => {
+    if (!ethPriceUsd || ethPriceUsd <= 0) {
+      // Fallback to fixed price if ETH price not available
+      return selectedPkg.priceEth;
+    }
+    const ethNeeded = usdPrice / ethPriceUsd;
+    const withBuffer = ethNeeded * 1.01; // 1% buffer
+    return withBuffer.toFixed(6);
+  };
+  
+  // Dynamic ETH amount based on current ETH price
+  const ethAmount = calculateEthAmount(selectedPkg.usd, ethPrice);
 
   // Get referrer from localStorage
   const getReferrer = (): `0x${string}` => {
@@ -214,8 +226,13 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
                   ))}
                 </div>
 
-                <div className="text-center text-white/60 mb-4">
+                <div className="text-center text-white/60 mb-4 space-y-1">
                   <p>Price: <span className="text-white font-bold">{ethAmount} ETH</span></p>
+                  {ethPrice && (
+                    <p className="text-xs text-white/40">
+                      (1 ETH = ${ethPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })})
+                    </p>
+                  )}
                 </div>
 
                 <button
