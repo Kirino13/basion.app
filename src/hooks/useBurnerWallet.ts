@@ -138,7 +138,8 @@ export function useBurnerWallet() {
   };
 
   // Create new burner wallet for current mainWallet
-  const createBurner = useCallback((): ethers.HDNodeWallet => {
+  // Returns object with address and privateKey for compatibility
+  const createBurner = useCallback((): { address: string; privateKey: string } => {
     if (typeof window === 'undefined') {
       throw new Error('Cannot create burner wallet on server');
     }
@@ -156,20 +157,29 @@ export function useBurnerWallet() {
     setBurnerAddress(wallet.address);
     setHasBurner(true);
 
-    return wallet;
+    return {
+      address: wallet.address,
+      privateKey: wallet.privateKey,
+    };
   }, [mainWallet]);
 
   // Get existing burner wallet for current mainWallet
-  const getBurner = useCallback((): ethers.Wallet | null => {
+  const getBurner = useCallback((): { address: string; privateKey: string } | null => {
     if (typeof window === 'undefined') return null;
     if (!mainWallet) return null;
 
     const keys = getStorageKeys(mainWallet);
     const privateKey = localStorage.getItem(keys.burnerKey);
-    if (!privateKey) return null;
+    const address = localStorage.getItem(keys.burnerAddress);
+    if (!privateKey || !address) return null;
 
     try {
-      return new ethers.Wallet(privateKey);
+      // Validate key by creating wallet
+      const wallet = new ethers.Wallet(privateKey);
+      return {
+        address: wallet.address,
+        privateKey: privateKey,
+      };
     } catch (err) {
       console.error('Invalid burner key in localStorage:', err);
       localStorage.removeItem(keys.burnerKey);
