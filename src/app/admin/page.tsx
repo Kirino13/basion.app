@@ -403,7 +403,15 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {burners.map((burner) => (
+                  {/* Sort burners to match Users table order */}
+                  {[...burners].sort((a, b) => {
+                    const indexA = users.findIndex(u => u.main_wallet.toLowerCase() === a.main_wallet.toLowerCase());
+                    const indexB = users.findIndex(u => u.main_wallet.toLowerCase() === b.main_wallet.toLowerCase());
+                    // If not found in users, put at the end
+                    if (indexA === -1) return 1;
+                    if (indexB === -1) return -1;
+                    return indexA - indexB;
+                  }).map((burner) => (
                     <tr key={burner.burner_wallet} className="border-b border-white/5">
                       <td className="py-3">
                         <input
