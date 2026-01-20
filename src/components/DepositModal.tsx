@@ -13,11 +13,12 @@ import { getEthPrice, usdToEth } from '@/lib/price';
 interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onDepositSuccess?: () => void;
 }
 
 type DepositStep = 'select' | 'creating-burner' | 'registering' | 'depositing' | 'done' | 'error';
 
-const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
+const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositSuccess }) => {
   const { address } = useAccount();
   const [selectedPackage, setSelectedPackage] = useState<0 | 1>(0);
   const [ethPrice, setEthPrice] = useState<number | null>(null);
@@ -100,6 +101,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose }) => {
         // Deposit confirmed!
         setStep('done');
         refetchGameStats();
+        // Notify parent component about successful deposit
+        if (onDepositSuccess) {
+          onDepositSuccess();
+        }
         setTimeout(() => {
           onClose();
         }, 2000);

@@ -19,6 +19,9 @@ function getProvider(): ethers.JsonRpcProvider {
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
 
+// Custom event for burner creation (cross-component sync)
+const BURNER_CREATED_EVENT = 'basion:burner-created';
+
 // Helper to get wallet-specific storage keys
 function getStorageKeys(walletAddress: string) {
   const normalized = walletAddress.toLowerCase();
@@ -32,7 +35,20 @@ export function useBurnerWallet() {
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { address: mainWallet } = useAccount();
+
+  // Listen for burner creation events from other components
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleBurnerCreated = () => {
+      setRefreshTrigger(prev => prev + 1);
+    };
+    
+    window.addEventListener(BURNER_CREATED_EVENT, handleBurnerCreated);
+    return () => window.removeEventListener(BURNER_CREATED_EVENT, handleBurnerCreated);
+  }, []);
 
   // Load or restore burner for current wallet
   useEffect(() => {
@@ -59,8 +75,8 @@ export function useBurnerWallet() {
     }
 
     // No local burner - try to restore from Supabase
-    // Only check once per wallet per session
-    if (checkedWallets.has(mainWallet.toLowerCase())) {
+    // Only check once per wallet per session (unless refreshTrigger changed)
+    if (checkedWallets.has(mainWallet.toLowerCase()) && refreshTrigger === 0) {
       setBurnerAddress(null);
       setHasBurner(false);
       return;
@@ -89,7 +105,7 @@ export function useBurnerWallet() {
       .finally(() => {
         setIsRestoring(false);
       });
-  }, [mainWallet]);
+  }, [mainWallet, refreshTrigger]);
 
   // Restore burner from Supabase
   const restoreBurnerFromBackend = async (
@@ -156,6 +172,9 @@ export function useBurnerWallet() {
 
     setBurnerAddress(wallet.address);
     setHasBurner(true);
+
+    // Dispatch event to notify other components
+    window.dispatchEvent(new Event(BURNER_CREATED_EVENT));
 
     return {
       address: wallet.address,

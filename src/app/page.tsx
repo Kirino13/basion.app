@@ -19,6 +19,11 @@ function HomeContent() {
     refetchGameStats();
   }, [refetchGameStats]);
 
+  // Called when deposit is successful
+  const handleDepositSuccess = useCallback(() => {
+    refetchGameStats();
+  }, [refetchGameStats]);
+
   const handleInvite = async () => {
     if (!address) return;
     const link = generateReferralLink(address);
@@ -32,7 +37,11 @@ function HomeContent() {
       <CloudBackground />
 
       {/* Deposit Modal */}
-      <DepositModal isOpen={isDepositOpen} onClose={() => setIsDepositOpen(false)} />
+      <DepositModal 
+        isOpen={isDepositOpen} 
+        onClose={() => setIsDepositOpen(false)} 
+        onDepositSuccess={handleDepositSuccess}
+      />
 
       {/* Main Split Layout */}
       <div className="relative z-10 w-full min-h-screen flex flex-col lg:flex-row">
@@ -45,31 +54,32 @@ function HomeContent() {
             ) : (
               <div className="flex flex-col items-center gap-6">
                 {/* Placeholder - entire white block visible, no text */}
-                <div className="relative w-64 h-64 lg:w-72 lg:h-72 bg-white/60 rounded-[48px] shadow-[0_18px_50px_rgba(0,0,0,0.15)]">
+                {/* Size increased by 15% to match TapArea */}
+                <div className="relative w-[294px] h-[294px] lg:w-[332px] lg:h-[332px] bg-white/60 rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
                   {/* Blue square inside */}
-                  <div className="absolute inset-[70px] bg-[rgba(0,0,255,0.5)] rounded-[16px]" />
+                  <div className="absolute inset-[80px] lg:inset-[90px] bg-[rgba(0,0,255,0.5)] rounded-[18px]" />
                 </div>
               </div>
             )}
 
-            {/* Bottom Action Area */}
+            {/* Bottom Action Area - buttons increased by 30% */}
             <div className="w-full flex flex-col px-2 mt-16">
-              <div className="w-full flex flex-row items-center justify-center gap-2">
+              <div className="w-full flex flex-row items-center justify-center gap-3">
                 {/* Deposit Button */}
                 <button
                   onClick={() => setIsDepositOpen(true)}
-                  className="flex-1 bg-white hover:bg-white/90 py-3 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 bg-white hover:bg-white/90 py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <CircleDollarSign size={18} className="text-blue-600" />
+                  <CircleDollarSign size={22} className="text-blue-600" />
                   Deposit
                 </button>
 
                 {/* Tap Balance Display */}
                 <button
                   onClick={() => setIsDepositOpen(true)}
-                  className="flex-1 bg-white py-3 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
-                  <Zap size={18} fill="currentColor" className="text-yellow-500" />
+                  <Zap size={22} fill="currentColor" className="text-yellow-500" />
                   <motion.span key={tapBalance} initial={{ scale: 1.1 }} animate={{ scale: 1 }}>
                     {tapBalance.toLocaleString().replace(/,/g, ' ')}
                   </motion.span>
@@ -79,7 +89,7 @@ function HomeContent() {
                 <button
                   onClick={handleInvite}
                   disabled={!isConnected}
-                  className={`flex-1 py-3 rounded-xl font-bold text-sm shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-4 px-4 rounded-2xl font-bold text-base shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2 ${
                     inviteCopied
                       ? 'bg-green-500 text-white'
                       : 'bg-white hover:bg-white/90 text-slate-900 disabled:opacity-50'
@@ -93,7 +103,7 @@ function HomeContent() {
                         animate={{ scale: 1, opacity: 1 }}
                         className="flex items-center gap-2"
                       >
-                        <Check size={18} /> Copied!
+                        <Check size={22} /> Copied!
                       </motion.div>
                     ) : (
                       <motion.div
@@ -102,7 +112,7 @@ function HomeContent() {
                         animate={{ scale: 1, opacity: 1 }}
                         className="flex items-center gap-2"
                       >
-                        <Copy size={18} className="text-blue-600" /> Invite
+                        <Copy size={22} className="text-blue-600" /> Invite
                       </motion.div>
                     )}
                   </AnimatePresence>
