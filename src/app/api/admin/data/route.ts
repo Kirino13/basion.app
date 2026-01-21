@@ -26,29 +26,27 @@ export async function GET(request: Request) {
     }
     adminRateLimitMap.set(adminAddress, Date.now());
 
-    // If signature provided, verify it (enhanced security)
-    if (signature && timestamp) {
-      const ts = parseInt(timestamp);
-      // Check timestamp is within 5 minutes
-      if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
-        return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
-      }
-      
-      try {
-        const message = `Basion Admin Access ${timestamp}`;
-        const isValid = await verifyMessage({
-          address: adminAddress as `0x${string}`,
-          message,
-          signature: signature as `0x${string}`,
-        });
-        
-        if (!isValid) {
-          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
-        }
-      } catch {
-        // Signature verification failed - continue with basic auth for backwards compatibility
-        console.warn('Admin signature verification failed, using basic auth');
-      }
+    // SECURITY: Signature is REQUIRED for admin access
+    if (!signature || !timestamp) {
+      return NextResponse.json({ error: 'Signature required' }, { status: 401 });
+    }
+
+    const ts = parseInt(timestamp);
+    // Check timestamp is within 5 minutes
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+      return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+    }
+    
+    // Verify signature
+    const message = `Basion Admin Access ${timestamp}`;
+    const isValid = await verifyMessage({
+      address: adminAddress as `0x${string}`,
+      message,
+      signature: signature as `0x${string}`,
+    });
+    
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     const supabase = getSupabaseAdmin();

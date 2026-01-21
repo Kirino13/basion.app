@@ -3,14 +3,38 @@ import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
 import { RPC_URL, TREASURY_ADDRESS, ADMIN_WALLET } from '@/config/constants';
+import { verifyMessage } from 'viem';
 
 export async function POST(request: Request) {
   try {
-    const { burnerAddresses, adminWallet } = await request.json();
+    const { burnerAddresses, adminWallet, signature, timestamp } = await request.json();
 
     // Verify admin wallet
     if (!adminWallet || adminWallet.toLowerCase() !== ADMIN_WALLET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // SECURITY: Signature is REQUIRED for withdraw
+    if (!signature || !timestamp) {
+      return NextResponse.json({ error: 'Signature required' }, { status: 401 });
+    }
+
+    const ts = parseInt(timestamp);
+    // Check timestamp is within 5 minutes
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+      return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+    }
+
+    // Verify signature
+    const message = `Basion Admin Withdraw ${timestamp}`;
+    const isValid = await verifyMessage({
+      address: adminWallet.toLowerCase() as `0x${string}`,
+      message,
+      signature: signature as `0x${string}`,
+    });
+    
+    if (!isValid) {
+      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     if (!burnerAddresses || !Array.isArray(burnerAddresses)) {

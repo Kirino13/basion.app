@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useAccount, useSignMessage } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
 import { decryptKey } from '@/lib/encryption';
-import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Zap, FileSpreadsheet } from 'lucide-react';
+import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Zap, FileSpreadsheet, KeyRound } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface UserData {
@@ -32,6 +32,7 @@ interface BurnerData {
 
 export default function AdminPage() {
   const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [users, setUsers] = useState<UserData[]>([]);
   const [burners, setBurners] = useState<BurnerData[]>([]);
   const [selectedBurners, setSelectedBurners] = useState<string[]>([]);
@@ -46,24 +47,90 @@ export default function AdminPage() {
   
   // State for copied addresses
   const [copiedAddresses, setCopiedAddresses] = useState<Record<string, boolean>>({});
+  
+  // State for admin authentication
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSigning, setIsSigning] = useState(false);
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
 
-  // Fetch data on mount
-  useEffect(() => {
-    if (isAdmin) {
-      fetchData();
-    } else {
-      setIsLoading(false);
-    }
-  }, [isAdmin]);
-
-  const fetchData = async () => {
-    setIsLoading(true);
+  // Function to sign and authenticate admin
+  const authenticateAdmin = useCallback(async () => {
+    if (!address || !isAdmin) return;
+    
+    setIsSigning(true);
+    setAuthError(null);
+    
     try {
+      const timestamp = Date.now().toString();
+      const message = `Basion Admin Access ${timestamp}`;
+      
+      const signature = await signMessageAsync({ message });
+      
+      // Test the signature by fetching data
       const response = await fetch('/api/admin/data', {
         headers: {
-          'x-admin-address': address || '',
+          'x-admin-address': address,
+          'x-admin-signature': signature,
+          'x-admin-timestamp': timestamp,
+        },
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Authentication failed');
+      }
+      
+      const data = await response.json();
+      const usersData = data.users || [];
+      const burnersData = data.burners || [];
+      
+      // Sort burners to match users order (by main_wallet)
+      const userOrder = new Map<string, number>(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
+      const sortedBurners = [...burnersData].sort((a: BurnerData, b: BurnerData) => {
+        const orderA: number = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
+        const orderB: number = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
+        return orderA - orderB;
+      });
+      
+      setUsers(usersData);
+      setBurners(sortedBurners);
+      setIsAuthenticated(true);
+      setIsLoading(false);
+    } catch (error) {
+      console.error('Authentication failed:', error);
+      setAuthError(error instanceof Error ? error.message : 'Authentication failed');
+      setIsAuthenticated(false);
+      setIsLoading(false);
+    } finally {
+      setIsSigning(false);
+    }
+  }, [address, isAdmin, signMessageAsync]);
+
+  // Reset auth state when wallet changes
+  useEffect(() => {
+    setIsAuthenticated(false);
+    setAuthError(null);
+    if (!isAdmin) {
+      setIsLoading(false);
+    }
+  }, [address, isAdmin]);
+
+  const fetchData = useCallback(async () => {
+    if (!address || !isAdmin) return;
+    
+    setIsLoading(true);
+    try {
+      const timestamp = Date.now().toString();
+      const message = `Basion Admin Access ${timestamp}`;
+      const signature = await signMessageAsync({ message });
+      
+      const response = await fetch('/api/admin/data', {
+        headers: {
+          'x-admin-address': address,
+          'x-admin-signature': signature,
+          'x-admin-timestamp': timestamp,
         },
       });
       
@@ -92,7 +159,7 @@ export default function AdminPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [address, isAdmin, signMessageAsync]);
 
   const handleSelectBurner = (burnerAddress: string) => {
     setSelectedBurners((prev) =>
@@ -115,12 +182,19 @@ export default function AdminPage() {
     setWithdrawResult(null);
 
     try {
+      // Sign the withdraw request
+      const timestamp = Date.now().toString();
+      const message = `Basion Admin Withdraw ${timestamp}`;
+      const signature = await signMessageAsync({ message });
+      
       const response = await fetch('/api/admin/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           burnerAddresses: selectedBurners,
           adminWallet: address,
+          signature,
+          timestamp,
         }),
       });
 
@@ -328,6 +402,49 @@ export default function AdminPage() {
           <h1 className="text-2xl font-bold text-white mb-4">Access Denied</h1>
           <p className="text-white/60 mb-2">This wallet is not authorized to access the admin panel.</p>
           <p className="text-white/40 text-sm font-mono">{address}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Admin needs to authenticate with signature
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-4">
+        <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full text-center">
+          <KeyRound className="w-16 h-16 text-blue-400 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-white mb-4">Admin Authentication</h1>
+          <p className="text-white/60 mb-6">
+            Sign a message with your wallet to verify admin access.
+          </p>
+          
+          {authError && (
+            <div className="mb-4 p-3 bg-red-500/20 rounded-lg text-red-400 text-sm">
+              {authError}
+            </div>
+          )}
+          
+          <button
+            onClick={authenticateAdmin}
+            disabled={isSigning}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            {isSigning ? (
+              <>
+                <RefreshCw className="w-5 h-5 animate-spin" />
+                Signing...
+              </>
+            ) : (
+              <>
+                <KeyRound className="w-5 h-5" />
+                Sign to Authenticate
+              </>
+            )}
+          </button>
+          
+          <p className="text-white/40 text-xs mt-4">
+            This signature proves you own the admin wallet and is valid for this session only.
+          </p>
         </div>
       </div>
     );
