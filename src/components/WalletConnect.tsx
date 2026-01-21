@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { baseSepolia } from 'wagmi/chains';
 import { Wallet } from 'lucide-react';
@@ -10,15 +10,32 @@ interface WalletConnectProps {
 }
 
 const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
-  const { address, isConnected, chainId } = useAccount();
-  const { connectors, connect, isPending } = useConnect();
+  const { address, isConnected, chainId, isConnecting, isReconnecting } = useAccount();
+  const { connectors, connect, isPending, reset } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain } = useSwitchChain();
+  const [isButtonDisabled, setIsButtonDisabled] = useState(false);
 
   const isWrongNetwork = isConnected && chainId !== baseSepolia.id;
 
+  // Reset pending state after timeout (in case it gets stuck)
+  useEffect(() => {
+    if (isPending || isConnecting || isReconnecting) {
+      setIsButtonDisabled(true);
+      const timeout = setTimeout(() => {
+        setIsButtonDisabled(false);
+        reset(); // Reset connect state if stuck
+      }, 10000); // 10 second timeout
+      return () => clearTimeout(timeout);
+    } else {
+      setIsButtonDisabled(false);
+    }
+  }, [isPending, isConnecting, isReconnecting, reset]);
+
   // Handle connect with the first available connector (injected wallet like MetaMask/Rabby)
   const handleConnect = () => {
+    if (isButtonDisabled) return;
+    
     const injectedConnector = connectors.find((c) => c.id === 'injected');
     if (injectedConnector) {
       connect({ connector: injectedConnector });
@@ -56,14 +73,16 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
     );
   }
 
+  const showConnecting = isPending || isConnecting || isReconnecting || isButtonDisabled;
+
   return (
     <button
       onClick={handleConnect}
-      disabled={isPending}
-      className={`py-3 px-6 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 bg-[#0052FF] text-white hover:bg-blue-700 shadow-blue-900/30 disabled:opacity-50 ${className}`}
+      disabled={showConnecting}
+      className={`py-3 px-6 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 bg-[#0052FF] text-white hover:bg-blue-700 shadow-blue-900/30 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
     >
       <Wallet className="w-4 h-4" />
-      {isPending ? 'Connecting...' : 'Connect'}
+      {showConnecting ? 'Connecting...' : 'Connect'}
     </button>
   );
 };

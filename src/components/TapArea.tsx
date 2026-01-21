@@ -168,23 +168,18 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check cooldown
+      // Check cooldown (allows 1 tap per second, up to 3 pending)
       if (!canTap()) {
         return; // Silently ignore too fast taps
-      }
-
-      // Check if processing another tap
-      if (isProcessing) {
-        return;
       }
 
       // Get click position from pointer event
       const clientX = e.clientX;
       const clientY = e.clientY;
 
-      // Start tap
-      setIsProcessing(true);
+      // Start tap - record immediately for throttle, don't block on isProcessing
       recordTap();
+      setIsProcessing(true);
 
       // Create bubble animation (visual feedback while processing)
       const newBubble: FloatingText = {

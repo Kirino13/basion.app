@@ -4,6 +4,7 @@ import { useRef, useCallback } from 'react';
 import { GAME_CONFIG } from '@/config/constants';
 
 const COOLDOWN_MS = GAME_CONFIG.tapCooldownMs;
+const MAX_PENDING_TAPS = 3; // Allow up to 3 taps in queue
 
 export function useTapThrottle() {
   const lastTapTimeRef = useRef<number>(0);
@@ -13,13 +14,14 @@ export function useTapThrottle() {
   const canTap = useCallback((): boolean => {
     const now = Date.now();
 
-    // Check cooldown
+    // Check cooldown (1 second between taps)
     if (now - lastTapTimeRef.current < COOLDOWN_MS) {
       return false;
     }
 
-    // Check if there's a pending tap
-    if (pendingTapsRef.current > 0) {
+    // Allow taps even if previous are pending, but limit queue
+    // This allows 1 tap per second while transactions confirm in background
+    if (pendingTapsRef.current >= MAX_PENDING_TAPS) {
       return false;
     }
 
