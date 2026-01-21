@@ -21,10 +21,10 @@ export async function GET(request: Request) {
       });
     }
 
-    // Fetch users (including boost data)
+    // Fetch users (including boost data and referral data)
     const { data: users, error: usersError } = await supabase
       .from('users')
-      .select('main_wallet, burner_wallet, total_points, premium_points, standard_points, taps_remaining, boost_percent, used_codes, created_at')
+      .select('main_wallet, burner_wallet, total_points, premium_points, standard_points, taps_remaining, boost_percent, used_codes, referred_by, referral_count, referral_bonus_claimed, created_at')
       .order('total_points', { ascending: false });
 
     if (usersError) {

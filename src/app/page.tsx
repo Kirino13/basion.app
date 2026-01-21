@@ -20,17 +20,22 @@ function HomeContent() {
   const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [boostMessage, setBoostMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
+  // Fetch boost percent
+  const fetchBoost = useCallback(() => {
+    if (!address) {
+      setBoostPercent(null);
+      return;
+    }
+    fetch(`/api/boost?address=${address}`)
+      .then(res => res.json())
+      .then(data => setBoostPercent(data.boostPercent ?? 0))
+      .catch(() => setBoostPercent(0));
+  }, [address]);
+
   // Fetch boost percent when address changes
   useEffect(() => {
-    if (address) {
-      fetch(`/api/boost?address=${address}`)
-        .then(res => res.json())
-        .then(data => setBoostPercent(data.boostPercent ?? 0))
-        .catch(() => setBoostPercent(0));
-    } else {
-      setBoostPercent(null);
-    }
-  }, [address]);
+    fetchBoost();
+  }, [fetchBoost]);
 
   // Clear boost message after 3 seconds
   useEffect(() => {
@@ -76,7 +81,9 @@ function HomeContent() {
   // Refetch stats when tap succeeds (blockchain confirmed)
   const handleTapSuccess = useCallback(() => {
     refetchGameStats();
-  }, [refetchGameStats]);
+    // Also refetch boost (in case referral bonus was applied on first tap)
+    fetchBoost();
+  }, [refetchGameStats, fetchBoost]);
 
   // Called when deposit is successful
   const handleDepositSuccess = useCallback(async () => {
@@ -173,7 +180,7 @@ function HomeContent() {
                         animate={{ scale: 1, opacity: 1 }}
                         className="flex items-center gap-2"
                       >
-                        <Copy size={22} className="text-blue-600" /> Invite
+                        <Copy size={22} className="text-blue-600" /> Invite +10%
                       </motion.div>
                     )}
                   </AnimatePresence>

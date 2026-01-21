@@ -17,6 +17,9 @@ interface UserData {
   taps_remaining: number;
   boost_percent: number;
   used_codes: string[];
+  referred_by: string | null;
+  referral_count: number;
+  referral_bonus_claimed: boolean;
 }
 
 interface BurnerData {
@@ -195,7 +198,7 @@ export default function AdminPage() {
     }
 
     // CSV header
-    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining', 'boost_percent', 'used_codes'];
+    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining', 'boost_percent', 'used_codes', 'referred_by', 'referral_count'];
     
     // CSV rows
     const rows = users.map(user => [
@@ -206,7 +209,9 @@ export default function AdminPage() {
       user.standard_points || 0,
       user.taps_remaining || 0,
       user.boost_percent || 0,
-      (user.used_codes || []).join(';')
+      (user.used_codes || []).join(';'),
+      user.referred_by || '',
+      user.referral_count || 0
     ]);
 
     // Combine header and rows
@@ -244,6 +249,8 @@ export default function AdminPage() {
       'Taps Remaining': user.taps_remaining || 0,
       'Boost %': user.boost_percent || 0,
       'Used Codes': (user.used_codes || []).join(', '),
+      'Referred By': user.referred_by || '',
+      'Referrals': user.referral_count || 0,
     }));
 
     // Add summary row
@@ -256,6 +263,8 @@ export default function AdminPage() {
       'Taps Remaining': totalTapsRemaining,
       'Boost %': users.reduce((sum, u) => sum + (u.boost_percent || 0), 0),
       'Used Codes': '',
+      'Referred By': '',
+      'Referrals': users.reduce((sum, u) => sum + (u.referral_count || 0), 0),
     });
 
     // Create workbook and worksheet
@@ -272,6 +281,8 @@ export default function AdminPage() {
       { wch: 15 }, // Taps Remaining
       { wch: 10 }, // Boost %
       { wch: 25 }, // Used Codes
+      { wch: 45 }, // Referred By
+      { wch: 10 }, // Referrals
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Users');
@@ -436,6 +447,7 @@ export default function AdminPage() {
                     <th className="pb-3 font-medium">Standard</th>
                     <th className="pb-3 font-medium">Taps Left</th>
                     <th className="pb-3 font-medium">Boost</th>
+                    <th className="pb-3 font-medium">Refs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -486,6 +498,7 @@ export default function AdminPage() {
                       <td className="py-3 text-blue-400">{(user.standard_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>
                       <td className="py-3 text-purple-400 font-medium">{user.boost_percent || 0}%</td>
+                      <td className="py-3 text-cyan-400">{user.referral_count || 0}</td>
                     </tr>
                   ))}
                 </tbody>

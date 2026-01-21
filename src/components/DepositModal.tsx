@@ -105,6 +105,24 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         // Retry 5 times with 1 second delay to wait for blockchain state
         const refreshData = async () => {
           await refetchGameStats(5, 1000);
+          
+          // Register referral relationship in database
+          const referrer = getReferrer();
+          if (address && referrer !== '0x0000000000000000000000000000000000000000') {
+            try {
+              await fetch('/api/referral/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userWallet: address,
+                  referrerWallet: referrer,
+                }),
+              });
+            } catch (err) {
+              console.error('Failed to register referral:', err);
+            }
+          }
+          
           // Notify parent component about successful deposit
           if (onDepositSuccess) {
             onDepositSuccess();

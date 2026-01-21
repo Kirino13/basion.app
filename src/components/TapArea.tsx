@@ -21,6 +21,9 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   // Ref for debounced sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
+  
+  // Ref to track if referral bonus has been claimed this session
+  const referralBonusClaimedRef = useRef(false);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -204,6 +207,24 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         
         // Update local state
         setLocalTaps(prev => Math.max(0, prev - 1));
+        
+        // On first tap, try to claim referral bonus (if user was invited)
+        if (!referralBonusClaimedRef.current && address) {
+          referralBonusClaimedRef.current = true;
+          try {
+            const bonusResp = await fetch('/api/referral/claim-bonus', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userWallet: address }),
+            });
+            const bonusData = await bonusResp.json();
+            if (bonusData.bonusApplied) {
+              console.log('Referral bonus applied:', bonusData.message);
+            }
+          } catch (err) {
+            console.error('Failed to claim referral bonus:', err);
+          }
+        }
         
         // Call success callback
         if (onTapSuccess) {
