@@ -37,9 +37,6 @@ export default function AdminPage() {
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
   const [copiedKeys, setCopiedKeys] = useState<Record<string, boolean>>({});
-  
-  // State for copied addresses
-  const [copiedAddresses, setCopiedAddresses] = useState<Record<string, boolean>>({});
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
 
@@ -169,15 +166,6 @@ export default function AdminPage() {
         setCopiedKeys((prev) => ({ ...prev, [burnerAddress]: false }));
       }, 2000);
     }
-  };
-
-  // Handle copy address to clipboard
-  const handleCopyAddress = (address: string, uniqueKey: string) => {
-    navigator.clipboard.writeText(address);
-    setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: true }));
-    setTimeout(() => {
-      setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: false }));
-    }, 2000);
   };
 
   // Export users to CSV
@@ -351,45 +339,13 @@ export default function AdminPage() {
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.main_wallet} className="border-b border-white/5">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white">
-                            {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(user.main_wallet, `user-main-${user.main_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`user-main-${user.main_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 font-mono text-sm text-white">
+                        {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
                       </td>
-                      <td className="py-3">
-                        {user.burner_wallet ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm text-white/60">
-                              {user.burner_wallet.slice(0, 8)}...{user.burner_wallet.slice(-6)}
-                            </span>
-                            <button
-                              onClick={() => handleCopyAddress(user.burner_wallet, `user-burner-${user.burner_wallet}`)}
-                              className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                              title="Copy address"
-                            >
-                              {copiedAddresses[`user-burner-${user.burner_wallet}`] ? (
-                                <Check className="w-3 h-3 text-green-400" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-white/40">-</span>
-                        )}
+                      <td className="py-3 font-mono text-sm text-white/60">
+                        {user.burner_wallet
+                          ? `${user.burner_wallet.slice(0, 8)}...${user.burner_wallet.slice(-6)}`
+                          : '-'}
                       </td>
                       <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
@@ -447,15 +403,7 @@ export default function AdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* Sort burners to match Users table order */}
-                  {[...burners].sort((a, b) => {
-                    const indexA = users.findIndex(u => u.main_wallet.toLowerCase() === a.main_wallet.toLowerCase());
-                    const indexB = users.findIndex(u => u.main_wallet.toLowerCase() === b.main_wallet.toLowerCase());
-                    // If not found in users, put at the end
-                    if (indexA === -1) return 1;
-                    if (indexB === -1) return -1;
-                    return indexA - indexB;
-                  }).map((burner) => (
+                  {burners.map((burner) => (
                     <tr key={burner.burner_wallet} className="border-b border-white/5">
                       <td className="py-3">
                         <input
@@ -466,41 +414,11 @@ export default function AdminPage() {
                           className="w-4 h-4 rounded"
                         />
                       </td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white">
-                            {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(burner.burner_wallet, `burner-${burner.burner_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`burner-${burner.burner_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 font-mono text-sm text-white">
+                        {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
                       </td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white/60">
-                            {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(burner.main_wallet, `burner-main-${burner.main_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`burner-main-${burner.main_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 font-mono text-sm text-white/60">
+                        {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
                       </td>
                       <td className="py-3 text-white">{burner.balance || '-'} ETH</td>
                       <td className="py-3">
