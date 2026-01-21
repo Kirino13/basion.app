@@ -5,9 +5,6 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 const VALID_CODE = 'MAVRINO40413';
 const BOOST_AMOUNT = 20;
 
-// In-memory storage for used codes (fallback if DB doesn't have the column)
-const usedCodesMemory = new Map<string, string[]>();
-
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
 // Applies a +20% boost if code is valid (max 100%)
@@ -37,7 +34,7 @@ export async function POST(request: Request) {
     // Get current user data
     const { data: userData, error: fetchError } = await supabase
       .from('users')
-      .select('boost_percent')
+      .select('boost_percent, used_codes')
       .eq('main_wallet', normalizedAddress)
       .single();
 
@@ -46,36 +43,30 @@ export async function POST(request: Request) {
     }
 
     const currentBoost = userData?.boost_percent || 0;
+    const usedCodes: string[] = userData?.used_codes || [];
 
-    // Check if code already used (in-memory check)
-    const userUsedCodes = usedCodesMemory.get(normalizedAddress) || [];
-    if (userUsedCodes.includes(normalizedCode)) {
-      return NextResponse.json({ ok: false, error: 'CODE_ALREADY_USED' });
-    }
-
-    // If user already has boost >= 20, they might have used the code before
-    if (currentBoost >= BOOST_AMOUNT) {
+    // Check if code already used by this user (from database)
+    if (usedCodes.includes(normalizedCode)) {
       return NextResponse.json({ ok: false, error: 'CODE_ALREADY_USED' });
     }
 
     // Calculate new boost (add 20%, max 100%)
     const newBoost = Math.min(currentBoost + BOOST_AMOUNT, 100);
+    const newUsedCodes = [...usedCodes, normalizedCode];
 
-    // Update user boost in database
+    // Update user boost and used codes in database
     const { error: updateError } = await supabase
       .from('users')
       .upsert({
         main_wallet: normalizedAddress,
         boost_percent: newBoost,
+        used_codes: newUsedCodes,
       }, { onConflict: 'main_wallet' });
 
     if (updateError) {
       console.error('Boost update error:', updateError);
       return NextResponse.json({ ok: false, error: 'UPDATE_FAILED' }, { status: 500 });
     }
-
-    // Mark code as used in memory
-    usedCodesMemory.set(normalizedAddress, [...userUsedCodes, normalizedCode]);
 
     return NextResponse.json({ 
       ok: true, 

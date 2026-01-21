@@ -15,6 +15,8 @@ interface UserData {
   premium_points: number;
   standard_points: number;
   taps_remaining: number;
+  boost_percent: number;
+  used_codes: string[];
 }
 
 interface BurnerData {
@@ -193,7 +195,7 @@ export default function AdminPage() {
     }
 
     // CSV header
-    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining'];
+    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining', 'boost_percent', 'used_codes'];
     
     // CSV rows
     const rows = users.map(user => [
@@ -202,7 +204,9 @@ export default function AdminPage() {
       user.total_points || 0,
       user.premium_points || 0,
       user.standard_points || 0,
-      user.taps_remaining || 0
+      user.taps_remaining || 0,
+      user.boost_percent || 0,
+      (user.used_codes || []).join(';')
     ]);
 
     // Combine header and rows
@@ -238,6 +242,8 @@ export default function AdminPage() {
       'Premium Points': user.premium_points || 0,
       'Standard Points': user.standard_points || 0,
       'Taps Remaining': user.taps_remaining || 0,
+      'Boost %': user.boost_percent || 0,
+      'Used Codes': (user.used_codes || []).join(', '),
     }));
 
     // Add summary row
@@ -248,6 +254,8 @@ export default function AdminPage() {
       'Premium Points': users.reduce((sum, u) => sum + (u.premium_points || 0), 0),
       'Standard Points': users.reduce((sum, u) => sum + (u.standard_points || 0), 0),
       'Taps Remaining': totalTapsRemaining,
+      'Boost %': users.reduce((sum, u) => sum + (u.boost_percent || 0), 0),
+      'Used Codes': '',
     });
 
     // Create workbook and worksheet
@@ -262,6 +270,8 @@ export default function AdminPage() {
       { wch: 15 }, // Premium Points
       { wch: 15 }, // Standard Points
       { wch: 15 }, // Taps Remaining
+      { wch: 10 }, // Boost %
+      { wch: 25 }, // Used Codes
     ];
 
     XLSX.utils.book_append_sheet(wb, ws, 'Users');
@@ -425,6 +435,7 @@ export default function AdminPage() {
                     <th className="pb-3 font-medium">Premium</th>
                     <th className="pb-3 font-medium">Standard</th>
                     <th className="pb-3 font-medium">Taps Left</th>
+                    <th className="pb-3 font-medium">Boost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -474,6 +485,7 @@ export default function AdminPage() {
                       <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-blue-400">{(user.standard_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>
+                      <td className="py-3 text-purple-400 font-medium">{user.boost_percent || 0}%</td>
                     </tr>
                   ))}
                 </tbody>
