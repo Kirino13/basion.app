@@ -108,11 +108,14 @@ export function useBurnerWallet() {
   }, [mainWallet, refreshTrigger]);
 
   // Restore burner from Supabase
+  // Note: Full restore requires signature from main wallet for security
+  // Without signature, we only get burner address (not the encrypted key)
   const restoreBurnerFromBackend = async (
     wallet: string, 
     keys: { burnerKey: string; burnerAddress: string }
   ): Promise<{ address: string; privateKey: string } | null> => {
     try {
+      // First, check if burner exists (without signature - just address)
       const res = await fetch(`/api/get-burner?wallet=${wallet}`);
       
       if (!res.ok) {
@@ -121,7 +124,16 @@ export function useBurnerWallet() {
       
       const data = await res.json();
       
-      if (!data.exists || !data.encryptedKey) {
+      if (!data.exists) {
+        return null;
+      }
+      
+      // If no encryptedKey returned (security: signature required for full restore)
+      // Just save the address for display purposes
+      if (!data.encryptedKey) {
+        // Burner exists on backend but we can't restore without signature
+        // User will need to create new burner or sign to restore
+        console.log('Burner exists but encrypted key requires signature to restore');
         return null;
       }
       

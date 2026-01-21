@@ -1,14 +1,54 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { ADMIN_WALLET } from '@/config/constants';
+import { verifyMessage } from 'viem';
+
+// Rate limiting for admin API
+const adminRateLimitMap = new Map<string, number>();
+const ADMIN_RATE_LIMIT_WINDOW = 1000; // 1 second between requests
 
 export async function GET(request: Request) {
   try {
-    // Verify admin wallet from header
+    // Get admin address and signature from headers
     const adminAddress = request.headers.get('x-admin-address')?.toLowerCase();
+    const signature = request.headers.get('x-admin-signature');
+    const timestamp = request.headers.get('x-admin-timestamp');
     
+    // Basic admin address check
     if (!adminAddress || adminAddress !== ADMIN_WALLET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    // Rate limiting per admin
+    const lastRequest = adminRateLimitMap.get(adminAddress);
+    if (lastRequest && Date.now() - lastRequest < ADMIN_RATE_LIMIT_WINDOW) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+    }
+    adminRateLimitMap.set(adminAddress, Date.now());
+
+    // If signature provided, verify it (enhanced security)
+    if (signature && timestamp) {
+      const ts = parseInt(timestamp);
+      // Check timestamp is within 5 minutes
+      if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+        return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+      }
+      
+      try {
+        const message = `Basion Admin Access ${timestamp}`;
+        const isValid = await verifyMessage({
+          address: adminAddress as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        
+        if (!isValid) {
+          return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+        }
+      } catch {
+        // Signature verification failed - continue with basic auth for backwards compatibility
+        console.warn('Admin signature verification failed, using basic auth');
+      }
     }
 
     const supabase = getSupabaseAdmin();

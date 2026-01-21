@@ -1,10 +1,41 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { verifyMessage } from 'viem';
+
+// Rate limiting: max 10 requests per minute per IP
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 10;
+const RATE_WINDOW = 60000; // 1 minute
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
+    return true;
+  }
+  
+  if (record.count >= RATE_LIMIT) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
 
 export async function GET(request: Request) {
   try {
+    // Rate limiting
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const wallet = searchParams.get('wallet');
+    const signature = searchParams.get('signature');
+    const timestamp = searchParams.get('timestamp');
 
     if (!wallet) {
       return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400 });
@@ -38,12 +69,48 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // Return encrypted key - only useful with ENCRYPTION_KEY
-    // Security: Even if someone intercepts this, they can't decrypt without the key
+    // SECURITY: Only return encrypted key if request includes valid signature
+    // This prevents attackers from fetching other users' encrypted keys
+    // Without signature, only return existence and address (for UI display)
+    if (signature && timestamp) {
+      // Verify timestamp is recent (within 5 minutes)
+      const ts = parseInt(timestamp);
+      if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+        return NextResponse.json({ 
+          exists: true, 
+          burnerAddress: data.burner_wallet,
+          error: 'Signature expired' 
+        });
+      }
+      
+      try {
+        // Verify signature
+        const message = `Restore burner wallet for ${wallet} at ${timestamp}`;
+        const isValid = await verifyMessage({
+          address: wallet as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+        
+        if (isValid) {
+          // Signature valid - return encrypted key
+          return NextResponse.json({
+            exists: true,
+            burnerAddress: data.burner_wallet,
+            encryptedKey: data.encrypted_key,
+          });
+        }
+      } catch (sigError) {
+        console.error('Signature verification failed:', sigError);
+      }
+    }
+
+    // Without valid signature, only return that burner exists (for UI purposes)
+    // The encrypted key is NOT returned - user must sign to prove ownership
     return NextResponse.json({
       exists: true,
       burnerAddress: data.burner_wallet,
-      encryptedKey: data.encrypted_key,
+      // encryptedKey intentionally omitted for security
     });
   } catch (error) {
     console.error('Get burner error:', error);

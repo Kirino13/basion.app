@@ -4,6 +4,10 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 const REFERRAL_BONUS = 10; // +10% boost
 const MAX_REFERRALS = 5;   // Max 5 referrals = 50% boost for referrer
 
+// Rate limiting
+const claimBonusRateLimitMap = new Map<string, number>();
+const CLAIM_RATE_WINDOW = 10000; // 10 seconds between claim attempts
+
 // POST /api/referral/claim-bonus
 // Called on first tap to apply referral bonuses
 // Body: { userWallet: string }
@@ -15,6 +19,19 @@ export async function POST(request: Request) {
     if (!userWallet) {
       return NextResponse.json({ error: 'Missing userWallet' }, { status: 400 });
     }
+
+    // Validate wallet address format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(userWallet)) {
+      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
+    }
+
+    // Rate limiting
+    const key = userWallet.toLowerCase();
+    const lastRequest = claimBonusRateLimitMap.get(key);
+    if (lastRequest && Date.now() - lastRequest < CLAIM_RATE_WINDOW) {
+      return NextResponse.json({ success: true, message: 'Rate limited', bonusApplied: false });
+    }
+    claimBonusRateLimitMap.set(key, Date.now());
 
     const supabase = getSupabaseAdmin();
     if (!supabase) {
