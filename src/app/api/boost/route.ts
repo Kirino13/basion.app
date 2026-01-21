@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
+// Disable caching for real-time boost updates
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // GET /api/boost?address=0x...
 // Returns the boost percentage for a user
 export async function GET(request: Request) {

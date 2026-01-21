@@ -22,7 +22,10 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const fetchLeaderboard = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/leaderboard?limit=10');
+      // Add timestamp to prevent caching
+      const res = await fetch(`/api/leaderboard?limit=10&t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
@@ -163,4 +166,4 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   );
 };
 
-export default React.memo(Leaderboard);
+export default Leaderboard;
