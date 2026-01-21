@@ -239,7 +239,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         } else if (errorMessage.includes('No burner')) {
           setError('Tap wallet not found');
         } else if (errorMessage.includes('nonce')) {
-          setError('Too many taps. Please wait.');
+          // Silently ignore nonce errors (too many taps)
+          return;
         } else if (errorMessage.includes('No taps')) {
           setError('Out of taps! Buy more.');
           setLocalTaps(0);
