@@ -100,14 +100,21 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       } else if (step === 'depositing') {
         // Deposit confirmed!
         setStep('done');
-        refetchGameStats();
-        // Notify parent component about successful deposit
-        if (onDepositSuccess) {
-          onDepositSuccess();
-        }
+        
+        // Aggressive refetch to ensure UI updates immediately
+        // Retry 5 times with 1 second delay to wait for blockchain state
+        const refreshData = async () => {
+          await refetchGameStats(5, 1000);
+          // Notify parent component about successful deposit
+          if (onDepositSuccess) {
+            onDepositSuccess();
+          }
+        };
+        refreshData();
+        
         setTimeout(() => {
           onClose();
-        }, 2000);
+        }, 2500);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
