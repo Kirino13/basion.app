@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Trophy, Users } from 'lucide-react';
 import { LeaderboardEntry } from '@/types';
 
@@ -13,13 +13,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 30000); // Update every 30 sec
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setError(null);
       // Add timestamp to prevent caching
@@ -40,9 +34,15 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const getRankBadge = (rank: number) => {
+  useEffect(() => {
+    fetchLeaderboard();
+    const interval = setInterval(fetchLeaderboard, 30000); // Update every 30 sec
+    return () => clearInterval(interval);
+  }, [fetchLeaderboard]);
+
+  const getRankBadge = useCallback((rank: number) => {
     if (rank === 1) {
       return (
         <div className="w-9 h-9 rounded-full bg-gradient-to-b from-[#FFD36B] to-[#FFB020] shadow-sm border border-yellow-200 flex items-center justify-center text-white text-sm font-black ring-2 ring-white/50">
@@ -69,15 +69,15 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         {rank}
       </div>
     );
-  };
+  }, []);
 
-  const formatPoints = (points: number) => {
+  const formatPoints = useCallback((points: number) => {
     // Show with 1 decimal place if not a whole number, always use dot as decimal separator
     if (points % 1 !== 0) {
       return points.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
     return points.toLocaleString('en-US');
-  };
+  }, []);
 
   // Loading state
   if (isLoading) {
@@ -166,4 +166,4 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   );
 };
 
-export default Leaderboard;
+export default React.memo(Leaderboard);

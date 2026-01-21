@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { baseSepolia } from 'wagmi/chains';
 import { Wallet } from 'lucide-react';
@@ -33,7 +33,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
   }, [isPending, isConnecting, isReconnecting, reset]);
 
   // Handle connect with the first available connector (injected wallet like MetaMask/Rabby)
-  const handleConnect = () => {
+  const handleConnect = useCallback(() => {
     if (isButtonDisabled) return;
     
     const injectedConnector = connectors.find((c) => c.id === 'injected');
@@ -42,12 +42,18 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
     } else if (connectors.length > 0) {
       connect({ connector: connectors[0] });
     }
-  };
+  }, [isButtonDisabled, connectors, connect]);
 
   // Handle network switch
-  const handleSwitchNetwork = () => {
+  const handleSwitchNetwork = useCallback(() => {
     switchChain({ chainId: baseSepolia.id });
-  };
+  }, [switchChain]);
+
+  // Memoize display address
+  const displayAddress = useMemo(() => {
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }, [address]);
 
   if (isWrongNetwork) {
     return (
@@ -68,7 +74,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
         className={`py-3 px-6 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 bg-[#0052FF] text-white hover:bg-blue-700 shadow-blue-900/30 ${className}`}
       >
         <Wallet className="w-4 h-4" />
-        {address.slice(0, 6)}...{address.slice(-4)}
+        {displayAddress}
       </button>
     );
   }
@@ -87,4 +93,4 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
   );
 };
 
-export default WalletConnect;
+export default React.memo(WalletConnect);
