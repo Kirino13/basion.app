@@ -32,9 +32,13 @@ function HomeContent() {
       .catch(() => setBoostPercent(0));
   }, [address]);
 
-  // Fetch boost percent when address changes
+  // Fetch boost percent when address changes + poll every 15 seconds
   useEffect(() => {
     fetchBoost();
+    
+    // Poll for boost updates (for when referrals tap)
+    const interval = setInterval(fetchBoost, 15000);
+    return () => clearInterval(interval);
   }, [fetchBoost]);
 
   // Clear boost message after 3 seconds
@@ -89,7 +93,9 @@ function HomeContent() {
   const handleDepositSuccess = useCallback(async () => {
     // Refetch with retries to ensure UI updates
     await refetchGameStats(3, 1000);
-  }, [refetchGameStats]);
+    // Also refresh boost in case it was set
+    fetchBoost();
+  }, [refetchGameStats, fetchBoost]);
 
   const handleInvite = async () => {
     if (!address) return;
