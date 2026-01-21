@@ -69,11 +69,11 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   };
 
   const formatPoints = (points: number) => {
-    // Show with 1 decimal place if not a whole number
+    // Show with 1 decimal place if not a whole number, always use dot as decimal separator
     if (points % 1 !== 0) {
-      return points.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      return points.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
-    return points.toLocaleString();
+    return points.toLocaleString('en-US');
   };
 
   // Loading state

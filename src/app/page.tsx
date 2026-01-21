@@ -264,11 +264,11 @@ function HomeContent() {
               <span className="text-lg font-bold text-white tracking-wide">
                 {(() => {
                   const boostedPoints = points * (1 + (boostPercent || 0) / 100);
-                  // Show with 1 decimal if not whole number
+                  // Show with 1 decimal if not whole number, always use dot
                   if (boostedPoints % 1 !== 0) {
-                    return boostedPoints.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                    return boostedPoints.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
                   }
-                  return boostedPoints.toLocaleString();
+                  return boostedPoints.toLocaleString('en-US');
                 })()} pts
               </span>
             </div>
