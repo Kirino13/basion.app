@@ -197,7 +197,7 @@ function HomeContent() {
                 <div className="flex-1 bg-white py-2 px-3 rounded-2xl shadow-xl shadow-blue-900/10 flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="CODE"
+                    placeholder="Code for Boost"
                     value={boostCode}
                     onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}

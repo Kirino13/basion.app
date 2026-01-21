@@ -3,6 +3,10 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 
 // Only one valid boost code
 const VALID_CODE = 'MAVRINO40413';
+const BOOST_AMOUNT = 20;
+
+// In-memory storage for used codes (fallback if DB doesn't have the column)
+const usedCodesMemory = new Map<string, string[]>();
 
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
@@ -16,7 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'MISSING_PARAMS' }, { status: 400 });
     }
 
-    // Normalize code
+    const normalizedAddress = address.toLowerCase();
     const normalizedCode = code.trim().toUpperCase();
 
     // Validate code - only MAVRINO40413 is valid
@@ -30,32 +34,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'DATABASE_NOT_CONFIGURED' }, { status: 500 });
     }
 
-    // Get current boost
-    const { data: userData } = await supabase
+    // Get current user data
+    const { data: userData, error: fetchError } = await supabase
       .from('users')
-      .select('boost_percent, used_codes')
-      .eq('main_wallet', address.toLowerCase())
+      .select('boost_percent')
+      .eq('main_wallet', normalizedAddress)
       .single();
 
-    const currentBoost = userData?.boost_percent || 0;
-    const usedCodes: string[] = userData?.used_codes || [];
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      console.error('Fetch user error:', fetchError);
+    }
 
-    // Check if code already used by this user
-    if (usedCodes.includes(normalizedCode)) {
+    const currentBoost = userData?.boost_percent || 0;
+
+    // Check if code already used (in-memory check)
+    const userUsedCodes = usedCodesMemory.get(normalizedAddress) || [];
+    if (userUsedCodes.includes(normalizedCode)) {
+      return NextResponse.json({ ok: false, error: 'CODE_ALREADY_USED' });
+    }
+
+    // If user already has boost >= 20, they might have used the code before
+    if (currentBoost >= BOOST_AMOUNT) {
       return NextResponse.json({ ok: false, error: 'CODE_ALREADY_USED' });
     }
 
     // Calculate new boost (add 20%, max 100%)
-    const newBoost = Math.min(currentBoost + 20, 100);
-    const newUsedCodes = [...usedCodes, normalizedCode];
+    const newBoost = Math.min(currentBoost + BOOST_AMOUNT, 100);
 
-    // Update user boost
+    // Update user boost in database
     const { error: updateError } = await supabase
       .from('users')
       .upsert({
-        main_wallet: address.toLowerCase(),
+        main_wallet: normalizedAddress,
         boost_percent: newBoost,
-        used_codes: newUsedCodes,
       }, { onConflict: 'main_wallet' });
 
     if (updateError) {
@@ -63,10 +74,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'UPDATE_FAILED' }, { status: 500 });
     }
 
+    // Mark code as used in memory
+    usedCodesMemory.set(normalizedAddress, [...userUsedCodes, normalizedCode]);
+
     return NextResponse.json({ 
       ok: true, 
       boostPercent: newBoost,
-      addedBoost: 20
+      addedBoost: BOOST_AMOUNT
     });
   } catch (error) {
     console.error('Boost redeem error:', error);
