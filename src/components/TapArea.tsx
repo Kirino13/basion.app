@@ -231,22 +231,14 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       } catch (err) {
         console.error('Tap error:', err);
         
-        // Analyze error
+        // Analyze error - only show critical errors, ignore transient tap errors
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         
-        if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
-          setError('Insufficient ETH for gas on tap wallet');
-        } else if (errorMessage.includes('No burner')) {
-          setError('Tap wallet not found');
-        } else if (errorMessage.includes('nonce')) {
-          // Silently ignore nonce errors (too many taps)
-          return;
-        } else if (errorMessage.includes('No taps')) {
+        if (errorMessage.includes('No taps')) {
           setError('Out of taps! Buy more.');
           setLocalTaps(0);
-        } else {
-          setError('Tap failed. Try again.');
         }
+        // All other errors (nonce, gas, network) - silently ignore for better UX
       } finally {
         setIsProcessing(false);
         completeTap();
