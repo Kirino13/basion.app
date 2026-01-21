@@ -259,9 +259,18 @@ function HomeContent() {
         <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 lg:py-8 lg:pr-8 lg:pl-0 min-h-0 mx-auto lg:mx-0">
           {/* Top Row */}
           <div className="grid grid-cols-2 gap-4 mt-2 mb-6 w-full">
-            {/* Points Badge */}
+            {/* Points Badge - with boost applied */}
             <div className="bg-green-500 rounded-xl py-3 flex flex-col justify-center items-center shadow-lg shadow-green-500/30">
-              <span className="text-lg font-bold text-white tracking-wide">{points.toLocaleString()} pts</span>
+              <span className="text-lg font-bold text-white tracking-wide">
+                {(() => {
+                  const boostedPoints = points * (1 + (boostPercent || 0) / 100);
+                  // Show with 1 decimal if not whole number
+                  if (boostedPoints % 1 !== 0) {
+                    return boostedPoints.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                  }
+                  return boostedPoints.toLocaleString();
+                })()} pts
+              </span>
             </div>
 
             {/* Connect Wallet */}

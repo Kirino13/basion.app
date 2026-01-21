@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('users')
-      .select('main_wallet, total_points')
+      .select('main_wallet, total_points, boost_percent')
       .gt('total_points', 0) // Only users with points
       .order('total_points', { ascending: false })
       .limit(limit);
@@ -26,12 +26,28 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // Format response with ranks
-    const leaderboard = (data || []).map((user, index) => ({
-      rank: index + 1,
-      wallet: user.main_wallet,
-      points: user.total_points || 0,
-    }));
+    // Format response with ranks and apply boost to points
+    const leaderboard = (data || [])
+      .map((user) => {
+        const basePoints = user.total_points || 0;
+        const boostPercent = user.boost_percent || 0;
+        // Apply boost: points * (1 + boost/100)
+        const boostedPoints = basePoints * (1 + boostPercent / 100);
+        return {
+          wallet: user.main_wallet,
+          points: boostedPoints,
+          basePoints: basePoints,
+          boostPercent: boostPercent,
+        };
+      })
+      // Re-sort by boosted points (in case boost changes ranking)
+      .sort((a, b) => b.points - a.points)
+      // Add ranks after sorting
+      .map((entry, index) => ({
+        rank: index + 1,
+        wallet: entry.wallet,
+        points: entry.points,
+      }));
 
     return NextResponse.json(leaderboard);
   } catch (error) {
