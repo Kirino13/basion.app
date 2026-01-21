@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
-// Valid boost codes from environment variable
-// Format: comma-separated, e.g. "CODE1,CODE2,BOOST20"
-const VALID_CODES = (process.env.BOOST_CODES || 'BASION20,BOOST2024').split(',').map(c => c.trim().toUpperCase());
+// Only one valid boost code
+const VALID_CODE = 'MAVRINO40413';
 
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
@@ -20,8 +19,8 @@ export async function POST(request: Request) {
     // Normalize code
     const normalizedCode = code.trim().toUpperCase();
 
-    // Validate code
-    if (!VALID_CODES.includes(normalizedCode)) {
+    // Validate code - only MAVRINO40413 is valid
+    if (normalizedCode !== VALID_CODE) {
       return NextResponse.json({ ok: false, error: 'INVALID_CODE' });
     }
 
