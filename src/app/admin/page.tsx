@@ -5,7 +5,8 @@ import { useAccount } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
 import { decryptKey } from '@/lib/encryption';
-import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download } from 'lucide-react';
+import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Zap, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface UserData {
   main_wallet: string;
@@ -37,6 +38,9 @@ export default function AdminPage() {
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
   const [copiedKeys, setCopiedKeys] = useState<Record<string, boolean>>({});
+  
+  // State for copied addresses
+  const [copiedAddresses, setCopiedAddresses] = useState<Record<string, boolean>>({});
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
 
@@ -168,6 +172,19 @@ export default function AdminPage() {
     }
   };
 
+  // Handle copy address to clipboard
+  const handleCopyAddress = (address: string, uniqueKey: string) => {
+    navigator.clipboard.writeText(address);
+    setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: true }));
+    setTimeout(() => {
+      setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: false }));
+    }, 2000);
+  };
+
+  // Calculate totals
+  const totalTapsDone = users.reduce((sum, user) => sum + (user.total_points || 0), 0);
+  const totalTapsRemaining = users.reduce((sum, user) => sum + (user.taps_remaining || 0), 0);
+
   // Export users to CSV
   const handleExportCSV = () => {
     if (users.length === 0) {
@@ -204,6 +221,56 @@ export default function AdminPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  // Export users to Excel
+  const handleExportExcel = () => {
+    if (users.length === 0) {
+      alert('No users to export');
+      return;
+    }
+
+    // Prepare data for Excel
+    const excelData = users.map(user => ({
+      'Main Wallet': user.main_wallet,
+      'Burner Wallet': user.burner_wallet || '',
+      'Total Points': user.total_points || 0,
+      'Premium Points': user.premium_points || 0,
+      'Standard Points': user.standard_points || 0,
+      'Taps Remaining': user.taps_remaining || 0,
+    }));
+
+    // Add summary row
+    excelData.push({
+      'Main Wallet': 'TOTAL',
+      'Burner Wallet': '',
+      'Total Points': totalTapsDone,
+      'Premium Points': users.reduce((sum, u) => sum + (u.premium_points || 0), 0),
+      'Standard Points': users.reduce((sum, u) => sum + (u.standard_points || 0), 0),
+      'Taps Remaining': totalTapsRemaining,
+    });
+
+    // Create workbook and worksheet
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(excelData);
+
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 45 }, // Main Wallet
+      { wch: 45 }, // Burner Wallet
+      { wch: 15 }, // Total Points
+      { wch: 15 }, // Premium Points
+      { wch: 15 }, // Standard Points
+      { wch: 15 }, // Taps Remaining
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Users');
+
+    // Generate filename with date
+    const filename = `basion_users_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    // Download file
+    XLSX.writeFile(wb, filename);
   };
 
   // Not connected
@@ -249,14 +316,22 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"
+              className="flex items-center gap-2 px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"
               title="Export Users to CSV"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm font-medium">Export CSV</span>
+              <span className="text-sm font-medium">CSV</span>
+            </button>
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-all"
+              title="Export Users to Excel"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              <span className="text-sm font-medium">Excel</span>
             </button>
             <button
               onClick={fetchData}
@@ -270,13 +345,29 @@ export default function AdminPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-5 h-5 text-blue-400" />
               <span className="text-white/60">Total Users</span>
             </div>
             <p className="text-3xl font-bold text-white">{users.length}</p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <Zap className="w-5 h-5 text-yellow-400" />
+              <span className="text-white/60">Total Taps Done</span>
+            </div>
+            <p className="text-3xl font-bold text-yellow-400">{totalTapsDone.toLocaleString()}</p>
+          </div>
+
+          <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
+            <div className="flex items-center gap-3 mb-2">
+              <Zap className="w-5 h-5 text-orange-400" />
+              <span className="text-white/60">Taps Remaining</span>
+            </div>
+            <p className="text-3xl font-bold text-orange-400">{totalTapsRemaining.toLocaleString()}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
@@ -289,7 +380,7 @@ export default function AdminPage() {
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <ArrowDownToLine className="w-5 h-5 text-yellow-400" />
+              <ArrowDownToLine className="w-5 h-5 text-cyan-400" />
               <span className="text-white/60">Pending Withdraw</span>
             </div>
             <p className="text-3xl font-bold text-white">{burners.filter((b) => !b.withdrawn).length}</p>
@@ -339,13 +430,45 @@ export default function AdminPage() {
                 <tbody>
                   {users.map((user) => (
                     <tr key={user.main_wallet} className="border-b border-white/5">
-                      <td className="py-3 font-mono text-sm text-white">
-                        {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white">
+                            {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyAddress(user.main_wallet, `user-main-${user.main_wallet}`)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy address"
+                          >
+                            {copiedAddresses[`user-main-${user.main_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
-                      <td className="py-3 font-mono text-sm text-white/60">
-                        {user.burner_wallet
-                          ? `${user.burner_wallet.slice(0, 8)}...${user.burner_wallet.slice(-6)}`
-                          : '-'}
+                      <td className="py-3">
+                        {user.burner_wallet ? (
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm text-white/60">
+                              {user.burner_wallet.slice(0, 8)}...{user.burner_wallet.slice(-6)}
+                            </span>
+                            <button
+                              onClick={() => handleCopyAddress(user.burner_wallet, `user-burner-${user.burner_wallet}`)}
+                              className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                              title="Copy address"
+                            >
+                              {copiedAddresses[`user-burner-${user.burner_wallet}`] ? (
+                                <Check className="w-3 h-3 text-green-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-white/40">-</span>
+                        )}
                       </td>
                       <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
@@ -414,11 +537,41 @@ export default function AdminPage() {
                           className="w-4 h-4 rounded"
                         />
                       </td>
-                      <td className="py-3 font-mono text-sm text-white">
-                        {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white">
+                            {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyAddress(burner.burner_wallet, `burner-${burner.burner_wallet}`)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy address"
+                          >
+                            {copiedAddresses[`burner-${burner.burner_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
-                      <td className="py-3 font-mono text-sm text-white/60">
-                        {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white/60">
+                            {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyAddress(burner.main_wallet, `burner-main-${burner.main_wallet}`)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy address"
+                          >
+                            {copiedAddresses[`burner-main-${burner.main_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 text-white">{burner.balance || '-'} ETH</td>
                       <td className="py-3">
