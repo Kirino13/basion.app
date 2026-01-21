@@ -76,10 +76,10 @@ export default function AdminPage() {
       const burnersData = data.burners || [];
       
       // Sort burners to match users order (by main_wallet)
-      const userOrder = new Map(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
+      const userOrder = new Map<string, number>(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
       const sortedBurners = [...burnersData].sort((a: BurnerData, b: BurnerData) => {
-        const orderA = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
-        const orderB = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
+        const orderA: number = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
+        const orderB: number = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
         return orderA - orderB;
       });
       
