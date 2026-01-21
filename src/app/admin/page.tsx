@@ -72,8 +72,19 @@ export default function AdminPage() {
       }
       
       const data = await response.json();
-      setUsers(data.users || []);
-      setBurners(data.burners || []);
+      const usersData = data.users || [];
+      const burnersData = data.burners || [];
+      
+      // Sort burners to match users order (by main_wallet)
+      const userOrder = new Map(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
+      const sortedBurners = [...burnersData].sort((a: BurnerData, b: BurnerData) => {
+        const orderA = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
+        const orderB = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
+        return orderA - orderB;
+      });
+      
+      setUsers(usersData);
+      setBurners(sortedBurners);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       setUsers([]);
