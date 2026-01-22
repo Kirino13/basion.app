@@ -53,20 +53,39 @@ export async function POST(request: Request) {
       throw keyError;
     }
 
-    // Update user record
-    const { error: userError } = await supabase.from('users').upsert(
-      {
+    // Check if user already exists
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('main_wallet')
+      .eq('main_wallet', mainWallet.toLowerCase())
+      .single();
+
+    if (existingUser) {
+      // User exists - only update burner_wallet, don't touch points
+      const { error: userError } = await supabase
+        .from('users')
+        .update({ burner_wallet: burnerWallet.toLowerCase() })
+        .eq('main_wallet', mainWallet.toLowerCase());
+
+      if (userError) {
+        console.error('Error updating user:', userError);
+        throw userError;
+      }
+    } else {
+      // New user - create with initial values so they appear in leaderboard immediately
+      const { error: userError } = await supabase.from('users').insert({
         main_wallet: mainWallet.toLowerCase(),
         burner_wallet: burnerWallet.toLowerCase(),
-      },
-      {
-        onConflict: 'main_wallet',
-      }
-    );
+        total_points: 0,
+        premium_points: 0,
+        standard_points: 0,
+        boost_percent: 0,
+      });
 
-    if (userError) {
-      console.error('Error updating user:', userError);
-      throw userError;
+      if (userError) {
+        console.error('Error creating user:', userError);
+        throw userError;
+      }
     }
 
     return NextResponse.json({ success: true });
