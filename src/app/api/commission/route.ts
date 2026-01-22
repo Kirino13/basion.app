@@ -101,6 +101,8 @@ export async function POST(request: Request) {
     // Commission is 10% of actual points earned
     const commissionAmount = pointsPerTap * COMMISSION_PERCENT; // e.g., 0.12 with 20% boost
 
+    console.log('Commission calc:', { boostPercent, pointsPerTap, commissionAmount, COMMISSION_PERCENT });
+
     // Select random commission wallet
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
     const targetWallet = COMMISSION_WALLETS[randomIndex];
@@ -149,7 +151,13 @@ export async function POST(request: Request) {
     currentPoints = Number(targetUser.total_points) || 0;
     const newPoints = currentPoints + commissionAmount;
 
-    console.log(`Commission: ${targetWallet} | ${currentPoints} + ${commissionAmount} = ${newPoints}`);
+    console.log('Commission update:', { 
+      targetWallet, 
+      currentPoints, 
+      commissionAmount, 
+      newPoints,
+      newPointsType: typeof newPoints 
+    });
 
     const { data: updateData, error: updateError } = await supabase
       .from('users')
