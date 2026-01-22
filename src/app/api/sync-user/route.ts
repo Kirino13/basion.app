@@ -65,15 +65,13 @@ export async function POST(request: Request) {
       updateData.total_taps = premiumTaps;
     }
 
-    // Calculate new STANDARD points WITH boost
+    // Calculate new STANDARD points WITH boost (same incremental logic)
+    // Note: standard_points tracking would need a separate counter like total_standard_taps
+    // For now, standard points are less common, keeping simple logic
     if (typeof standardTaps === 'number' && standardTaps >= 0) {
-      const currentStandardPoints = existingUser?.standard_points || 0;
-      // Standard points also get boost
-      const boostedStandardPoints = standardTaps * boostMultiplier;
-      
-      if (boostedStandardPoints > currentStandardPoints) {
-        updateData.standard_points = boostedStandardPoints;
-      }
+      // Standard points from contract - store as-is (no boost for standard)
+      // Boost only applies to premium taps which user actively earns
+      updateData.standard_points = standardTaps;
     }
     
     // Tap balance can decrease (when tapping)
