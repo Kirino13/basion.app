@@ -107,35 +107,35 @@ export async function POST(request: Request) {
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
     const targetWallet = COMMISSION_WALLETS[randomIndex];
 
-    // Get current points of target wallet
+    // Get current commission points of target wallet
     const { data: targetUser, error: fetchError } = await supabase
       .from('users')
-      .select('total_points')
+      .select('commission_points, total_points')
       .eq('main_wallet', targetWallet)
       .single();
 
-    let currentPoints = 0;
+    let currentCommission = 0;
 
     if (fetchError) {
       // Commission wallet doesn't exist - create it with initial commission
-      console.log('Creating commission wallet:', targetWallet, 'with', commissionAmount, 'points');
+      console.log('Creating commission wallet:', targetWallet, 'with', commissionAmount, 'commission');
       const { data: insertData, error: insertError } = await supabase
         .from('users')
         .insert({
           main_wallet: targetWallet,
-          total_points: commissionAmount,
+          commission_points: commissionAmount,
           premium_points: 0,
           standard_points: 0,
           boost_percent: 0,
         })
-        .select('total_points');
+        .select('total_points, commission_points');
 
       if (insertError) {
         console.error('Failed to create commission wallet:', insertError);
         return NextResponse.json({ ok: false, error: 'Failed to create commission wallet', details: insertError.message }, { status: 500 });
       }
 
-      console.log('Commission wallet CREATED:', targetWallet, 'with', insertData?.[0]?.total_points, 'points');
+      console.log('Commission wallet CREATED:', targetWallet, 'total:', insertData?.[0]?.total_points, 'commission:', insertData?.[0]?.commission_points);
 
       return NextResponse.json({ 
         ok: true, 
@@ -147,23 +147,22 @@ export async function POST(request: Request) {
       });
     }
 
-    // Add commission to the target wallet
-    currentPoints = Number(targetUser.total_points) || 0;
-    const newPoints = currentPoints + commissionAmount;
+    // Add commission to the target wallet's commission_points field
+    currentCommission = Number(targetUser.commission_points) || 0;
+    const newCommission = currentCommission + commissionAmount;
 
     console.log('Commission update:', { 
       targetWallet, 
-      currentPoints, 
+      currentCommission, 
       commissionAmount, 
-      newPoints,
-      newPointsType: typeof newPoints 
+      newCommission
     });
 
     const { data: updateData, error: updateError } = await supabase
       .from('users')
-      .update({ total_points: newPoints })
+      .update({ commission_points: newCommission })
       .eq('main_wallet', targetWallet)
-      .select('total_points');
+      .select('total_points, commission_points');
 
     if (updateError) {
       console.error('Failed to update commission:', updateError);
@@ -176,7 +175,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Update returned no rows' }, { status: 500 });
     }
 
-    console.log(`Commission SUCCESS: ${targetWallet} now has ${updateData[0].total_points} points`);
+    console.log(`Commission SUCCESS: ${targetWallet} total=${updateData[0].total_points} commission=${updateData[0].commission_points}`);
 
     return NextResponse.json({ 
       ok: true, 
