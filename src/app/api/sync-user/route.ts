@@ -37,7 +37,8 @@ setInterval(() => {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { mainWallet, points, premiumPoints, standardPoints, tapBalance } = body;
+    // premiumTaps and standardTaps are TAP COUNTS from contract (not boosted)
+    const { mainWallet, premiumPoints: premiumTaps, standardPoints: standardTaps, tapBalance } = body;
 
     if (!mainWallet) {
       return NextResponse.json({ error: 'Missing mainWallet' }, { status: 400 });
@@ -59,48 +60,53 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Get existing user data to validate changes
+    // Get existing user data including boost and tap counts
     const { data: existingUser } = await supabase
       .from('users')
-      .select('total_points, premium_points, standard_points, taps_remaining')
+      .select('total_taps, premium_points, standard_points, boost_percent, taps_remaining')
       .eq('main_wallet', mainWallet.toLowerCase())
       .single();
 
-    // Build update object - only include fields with valid values
+    // Get user's current boost percentage
+    const boostPercent = existingUser?.boost_percent || 0;
+    const boostMultiplier = 1 + boostPercent / 100;
+
+    // Build update object
     const updateData: Record<string, unknown> = {
       main_wallet: mainWallet.toLowerCase(),
       last_tap_at: new Date().toISOString(),
     };
-    
-    // Update total_taps = premium_points (1 tap = 1 premium_point)
-    // This represents total taps made by the user
-    if (typeof premiumPoints === 'number' && premiumPoints >= 0) {
-      updateData.total_taps = premiumPoints;
-    }
-    
-    // SECURITY: Only allow points to increase, not decrease (prevents manipulation)
-    // Points can only go down through legitimate game mechanics (not client sync)
-    if (typeof points === 'number' && points >= 0) {
-      const currentPoints = existingUser?.total_points || 0;
-      // Allow increase or small decrease (due to sync timing)
-      if (points >= currentPoints || currentPoints - points <= 5) {
-        updateData.total_points = points;
+
+    // Calculate new PREMIUM points with boost
+    // Contract gives us tap count, we convert to points with boost
+    if (typeof premiumTaps === 'number' && premiumTaps >= 0) {
+      const oldTotalTaps = existingUser?.total_taps || 0;
+      const newTaps = Math.max(0, premiumTaps - oldTotalTaps);
+      
+      if (newTaps > 0) {
+        // Calculate points to add with boost
+        const pointsToAdd = newTaps * boostMultiplier;
+        const currentPremiumPoints = existingUser?.premium_points || 0;
+        
+        updateData.premium_points = currentPremiumPoints + pointsToAdd;
       }
+      
+      // Always update total_taps to sync with contract
+      updateData.total_taps = premiumTaps;
     }
-    
-    // Update premium points (more valuable - 1 tap = 1 tx)
-    if (typeof premiumPoints === 'number' && premiumPoints >= 0) {
-      const currentPremium = existingUser?.premium_points || 0;
-      if (premiumPoints >= currentPremium || currentPremium - premiumPoints <= 5) {
-        updateData.premium_points = premiumPoints;
-      }
-    }
-    
-    // Update standard points (batch mode)
-    if (typeof standardPoints === 'number' && standardPoints >= 0) {
-      const currentStandard = existingUser?.standard_points || 0;
-      if (standardPoints >= currentStandard || currentStandard - standardPoints <= 5) {
-        updateData.standard_points = standardPoints;
+
+    // Calculate new STANDARD points with boost (for batch taps)
+    if (typeof standardTaps === 'number' && standardTaps >= 0) {
+      // For standard points, we don't have a separate tap counter
+      // So we track the delta based on the incoming value
+      const currentStandardPoints = existingUser?.standard_points || 0;
+      
+      // Standard taps from contract - apply boost
+      // Note: This assumes standardTaps is cumulative from contract
+      const boostedStandardPoints = standardTaps * boostMultiplier;
+      
+      if (boostedStandardPoints > currentStandardPoints) {
+        updateData.standard_points = boostedStandardPoints;
       }
     }
     
@@ -112,6 +118,9 @@ export async function POST(request: Request) {
         updateData.taps_remaining = tapBalance;
       }
     }
+
+    // Note: total_points is calculated by DB trigger:
+    // total_points = premium_points + standard_points + commission_points
 
     const { error } = await supabase.from('users').upsert(
       updateData,

@@ -273,8 +273,8 @@ export default function AdminPage() {
   };
 
   // Calculate totals
-  // Total taps done = premium_points (1 tap = 1 premium_point, NOT total_points which includes commission)
-  const totalTapsDone = users.reduce((sum, user) => sum + (user.premium_points || 0), 0);
+  // Total points = sum of all users' total_points (already includes boost + commission)
+  const totalPointsAll = users.reduce((sum, user) => sum + (user.total_points || 0), 0);
   const totalTapsRemaining = users.reduce((sum, user) => sum + (user.taps_remaining || 0), 0);
 
   // Export users to CSV
@@ -344,7 +344,7 @@ export default function AdminPage() {
     excelData.push({
       'Main Wallet': 'TOTAL',
       'Burner Wallet': '',
-      'Total Points': totalTapsDone,
+      'Total Points': totalPointsAll,
       'Premium Points': users.reduce((sum, u) => sum + (u.premium_points || 0), 0),
       'Standard Points': users.reduce((sum, u) => sum + (u.standard_points || 0), 0),
       'Taps Remaining': totalTapsRemaining,
@@ -508,9 +508,9 @@ export default function AdminPage() {
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
               <Zap className="w-5 h-5 text-yellow-400" />
-              <span className="text-white/60">Total Taps Done</span>
+              <span className="text-white/60">Total Points</span>
             </div>
-            <p className="text-3xl font-bold text-yellow-400">{totalTapsDone.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-yellow-400">{totalPointsAll.toLocaleString()}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
