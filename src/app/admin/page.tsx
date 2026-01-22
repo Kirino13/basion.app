@@ -14,6 +14,7 @@ interface UserData {
   total_points: number;
   premium_points: number;
   standard_points: number;
+  total_taps: number;
   taps_remaining: number;
   boost_percent: number;
   used_codes: string[];
@@ -272,7 +273,8 @@ export default function AdminPage() {
   };
 
   // Calculate totals
-  const totalTapsDone = users.reduce((sum, user) => sum + (user.total_points || 0), 0);
+  // Total taps done = premium_points (1 tap = 1 premium_point, NOT total_points which includes commission)
+  const totalTapsDone = users.reduce((sum, user) => sum + (user.premium_points || 0), 0);
   const totalTapsRemaining = users.reduce((sum, user) => sum + (user.taps_remaining || 0), 0);
 
   // Export users to CSV

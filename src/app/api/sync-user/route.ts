@@ -72,6 +72,12 @@ export async function POST(request: Request) {
       last_tap_at: new Date().toISOString(),
     };
     
+    // Update total_taps = premium_points (1 tap = 1 premium_point)
+    // This represents total taps made by the user
+    if (typeof premiumPoints === 'number' && premiumPoints >= 0) {
+      updateData.total_taps = premiumPoints;
+    }
+    
     // SECURITY: Only allow points to increase, not decrease (prevents manipulation)
     // Points can only go down through legitimate game mechanics (not client sync)
     if (typeof points === 'number' && points >= 0) {
