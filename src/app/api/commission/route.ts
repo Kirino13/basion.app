@@ -15,8 +15,8 @@ const COMMISSION_WALLETS = [
   '0xb72c6f4a2e2f5da09de215919f174c511ac998c5',
 ].map(w => w.toLowerCase());
 
-// Commission rate: 10% = 0.1 points per tap
-const COMMISSION_RATE = 0.1;
+// Commission rate: 10% of points earned per tap
+const COMMISSION_PERCENT = 0.1; // 10%
 
 // Rate limiting to prevent abuse
 const commissionRateLimitMap = new Map<string, { count: number; resetAt: number }>();
@@ -86,6 +86,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'no_database' });
     }
 
+    // Get tapper's boost percentage to calculate actual points per tap
+    const { data: tapperData } = await supabase
+      .from('users')
+      .select('boost_percent')
+      .eq('main_wallet', normalizedWallet)
+      .single();
+
+    // Calculate points per tap with boost
+    // Base: 1 point, with boost: 1 * (1 + boost_percent/100)
+    const boostPercent = tapperData?.boost_percent || 0;
+    const pointsPerTap = 1 * (1 + boostPercent / 100); // e.g., 1.2 with 20% boost, 1.5 with 50% boost
+    
+    // Commission is 10% of actual points earned
+    const commissionAmount = pointsPerTap * COMMISSION_PERCENT; // e.g., 0.12 with 20% boost
+
     // Select random commission wallet
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
     const targetWallet = COMMISSION_WALLETS[randomIndex];
@@ -102,9 +117,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Commission wallet not found' }, { status: 500 });
     }
 
-    // Add 0.1 points to the target wallet
+    // Add commission to the target wallet
     const currentPoints = Number(targetUser.total_points) || 0;
-    const newPoints = currentPoints + COMMISSION_RATE;
+    const newPoints = currentPoints + commissionAmount;
 
     const { error: updateError } = await supabase
       .from('users')
@@ -119,7 +134,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       ok: true, 
       targetWallet,
-      commission: COMMISSION_RATE 
+      commission: commissionAmount,
+      boostPercent,
+      pointsPerTap
     });
   } catch (error) {
     console.error('Commission error:', error);
