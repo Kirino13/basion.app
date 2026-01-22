@@ -112,13 +112,38 @@ export async function POST(request: Request) {
       .eq('main_wallet', targetWallet)
       .single();
 
+    let currentPoints = 0;
+
     if (fetchError) {
-      console.error('Failed to fetch commission wallet:', fetchError);
-      return NextResponse.json({ ok: false, error: 'Commission wallet not found' }, { status: 500 });
+      // Commission wallet doesn't exist - create it with initial commission
+      console.log('Creating commission wallet:', targetWallet);
+      const { error: insertError } = await supabase
+        .from('users')
+        .insert({
+          main_wallet: targetWallet,
+          total_points: commissionAmount,
+          premium_points: 0,
+          standard_points: 0,
+          boost_percent: 0,
+        });
+
+      if (insertError) {
+        console.error('Failed to create commission wallet:', insertError);
+        return NextResponse.json({ ok: false, error: 'Failed to create commission wallet' }, { status: 500 });
+      }
+
+      return NextResponse.json({ 
+        ok: true, 
+        targetWallet,
+        commission: commissionAmount,
+        boostPercent,
+        pointsPerTap,
+        created: true
+      });
     }
 
     // Add commission to the target wallet
-    const currentPoints = Number(targetUser.total_points) || 0;
+    currentPoints = Number(targetUser.total_points) || 0;
     const newPoints = currentPoints + commissionAmount;
 
     const { error: updateError } = await supabase
