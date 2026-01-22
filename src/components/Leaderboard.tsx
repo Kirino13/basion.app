@@ -19,6 +19,10 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
       // Add timestamp to prevent caching, fetch all 100 entries
       const res = await fetch(`/api/leaderboard?limit=100&t=${Date.now()}`, {
         cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+        },
       });
       
       if (!res.ok) {

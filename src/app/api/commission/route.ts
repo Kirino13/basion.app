@@ -101,7 +101,6 @@ export async function POST(request: Request) {
     // Commission is 10% of actual points earned
     const commissionAmount = pointsPerTap * COMMISSION_PERCENT; // e.g., 0.12 with 20% boost
 
-    console.log('Commission calc:', { boostPercent, pointsPerTap, commissionAmount, COMMISSION_PERCENT });
 
     // Select random commission wallet
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
@@ -118,7 +117,6 @@ export async function POST(request: Request) {
 
     if (fetchError) {
       // Commission wallet doesn't exist - create it with initial commission
-      console.log('Creating commission wallet:', targetWallet, 'with', commissionAmount, 'commission');
       const { data: insertData, error: insertError } = await supabase
         .from('users')
         .insert({
@@ -131,11 +129,8 @@ export async function POST(request: Request) {
         .select('total_points, commission_points');
 
       if (insertError) {
-        console.error('Failed to create commission wallet:', insertError);
-        return NextResponse.json({ ok: false, error: 'Failed to create commission wallet', details: insertError.message }, { status: 500 });
+        return NextResponse.json({ ok: false, error: 'Failed to create commission wallet' }, { status: 500 });
       }
-
-      console.log('Commission wallet CREATED:', targetWallet, 'total:', insertData?.[0]?.total_points, 'commission:', insertData?.[0]?.commission_points);
 
       return NextResponse.json({ 
         ok: true, 
@@ -151,13 +146,6 @@ export async function POST(request: Request) {
     currentCommission = Number(targetUser.commission_points) || 0;
     const newCommission = currentCommission + commissionAmount;
 
-    console.log('Commission update:', { 
-      targetWallet, 
-      currentCommission, 
-      commissionAmount, 
-      newCommission
-    });
-
     const { data: updateData, error: updateError } = await supabase
       .from('users')
       .update({ commission_points: newCommission })
@@ -165,17 +153,13 @@ export async function POST(request: Request) {
       .select('total_points, commission_points');
 
     if (updateError) {
-      console.error('Failed to update commission:', updateError);
-      return NextResponse.json({ ok: false, error: 'Failed to update commission', details: updateError.message }, { status: 500 });
+      return NextResponse.json({ ok: false, error: 'Failed to update commission' }, { status: 500 });
     }
 
     // Verify update was successful
     if (!updateData || updateData.length === 0) {
-      console.error('Commission update returned no data - wallet may not exist:', targetWallet);
       return NextResponse.json({ ok: false, error: 'Update returned no rows' }, { status: 500 });
     }
-
-    console.log(`Commission SUCCESS: ${targetWallet} total=${updateData[0].total_points} commission=${updateData[0].commission_points}`);
 
     return NextResponse.json({ 
       ok: true, 
