@@ -226,6 +226,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           onTapSuccess();
         }
 
+        // Send 10% commission to random admin wallet (fire and forget)
+        fetch('/api/commission', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fromWallet: address }),
+        }).catch(() => {}); // Ignore errors, commission is non-critical
+
         // Schedule Supabase sync (debounced)
         scheduleSync();
       } catch (err) {
