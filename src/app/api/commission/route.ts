@@ -116,8 +116,8 @@ export async function POST(request: Request) {
 
     if (fetchError) {
       // Commission wallet doesn't exist - create it with initial commission
-      console.log('Creating commission wallet:', targetWallet);
-      const { error: insertError } = await supabase
+      console.log('Creating commission wallet:', targetWallet, 'with', commissionAmount, 'points');
+      const { data: insertData, error: insertError } = await supabase
         .from('users')
         .insert({
           main_wallet: targetWallet,
@@ -125,12 +125,15 @@ export async function POST(request: Request) {
           premium_points: 0,
           standard_points: 0,
           boost_percent: 0,
-        });
+        })
+        .select('total_points');
 
       if (insertError) {
         console.error('Failed to create commission wallet:', insertError);
-        return NextResponse.json({ ok: false, error: 'Failed to create commission wallet' }, { status: 500 });
+        return NextResponse.json({ ok: false, error: 'Failed to create commission wallet', details: insertError.message }, { status: 500 });
       }
+
+      console.log('Commission wallet CREATED:', targetWallet, 'with', insertData?.[0]?.total_points, 'points');
 
       return NextResponse.json({ 
         ok: true, 
@@ -148,15 +151,24 @@ export async function POST(request: Request) {
 
     console.log(`Commission: ${targetWallet} | ${currentPoints} + ${commissionAmount} = ${newPoints}`);
 
-    const { error: updateError } = await supabase
+    const { data: updateData, error: updateError } = await supabase
       .from('users')
       .update({ total_points: newPoints })
-      .eq('main_wallet', targetWallet);
+      .eq('main_wallet', targetWallet)
+      .select('total_points');
 
     if (updateError) {
       console.error('Failed to update commission:', updateError);
       return NextResponse.json({ ok: false, error: 'Failed to update commission', details: updateError.message }, { status: 500 });
     }
+
+    // Verify update was successful
+    if (!updateData || updateData.length === 0) {
+      console.error('Commission update returned no data - wallet may not exist:', targetWallet);
+      return NextResponse.json({ ok: false, error: 'Update returned no rows' }, { status: 500 });
+    }
+
+    console.log(`Commission SUCCESS: ${targetWallet} now has ${updateData[0].total_points} points`);
 
     return NextResponse.json({ 
       ok: true, 
