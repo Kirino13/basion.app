@@ -231,7 +231,16 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fromWallet: address }),
-        }).catch(() => {}); // Ignore errors, commission is non-critical
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.ok) {
+              console.log('Commission sent:', data.commission, 'to', data.targetWallet);
+            } else {
+              console.error('Commission failed:', data.error);
+            }
+          })
+          .catch(err => console.error('Commission error:', err));
 
         // Schedule Supabase sync (debounced)
         scheduleSync();
