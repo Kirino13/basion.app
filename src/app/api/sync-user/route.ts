@@ -5,7 +5,7 @@ import { syncUserLimiter, checkRateLimit } from '@/lib/rateLimit';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // premiumTaps and standardTaps are TAP COUNTS from contract (not boosted)
+    // premiumTaps and standardTaps are TAP COUNTS from contract
     const { mainWallet, premiumPoints: premiumTaps, standardPoints: standardTaps, tapBalance } = body;
 
     if (!mainWallet) {
@@ -29,12 +29,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Get existing user data
+    // Get existing user data INCLUDING boost_percent
     const { data: existingUser } = await supabase
       .from('users')
-      .select('total_taps, premium_points, standard_points, taps_remaining')
+      .select('total_taps, premium_points, standard_points, taps_remaining, boost_percent')
       .eq('main_wallet', mainWallet.toLowerCase())
       .single();
+
+    // Get user's boost multiplier (boost is applied at earning time)
+    const boostPercent = existingUser?.boost_percent || 0;
+    const boostMultiplier = 1 + boostPercent / 100; // e.g., 1.2 for 20% boost
 
     // Build update object
     const updateData: Record<string, unknown> = {
@@ -42,38 +46,39 @@ export async function POST(request: Request) {
       last_tap_at: new Date().toISOString(),
     };
 
-    // Store RAW points WITHOUT boost (boost is applied only on display)
-    // This allows changing boost without recalculating all points in DB
+    // Store BOOSTED points (boost applied at earning time)
+    // This way DB stores actual points, and we show them as-is everywhere
     
-    // Calculate new PREMIUM points (raw, no boost)
+    // Calculate new PREMIUM points WITH boost
     if (typeof premiumTaps === 'number' && premiumTaps >= 0) {
       const oldTotalTaps = existingUser?.total_taps || 0;
       const newTaps = Math.max(0, premiumTaps - oldTotalTaps);
       
       if (newTaps > 0) {
-        // Store raw points (1 tap = 1 point, no boost multiplication)
+        // Apply boost at earning time: new_taps × boost_multiplier
+        const earnedPoints = newTaps * boostMultiplier;
         const currentPremiumPoints = existingUser?.premium_points || 0;
-        updateData.premium_points = currentPremiumPoints + newTaps;
+        updateData.premium_points = currentPremiumPoints + earnedPoints;
       }
       
-      // Always update total_taps to sync with contract
+      // Always update total_taps to sync with contract (raw tap count)
       updateData.total_taps = premiumTaps;
     }
 
-    // Calculate new STANDARD points (raw, no boost)
+    // Calculate new STANDARD points WITH boost
     if (typeof standardTaps === 'number' && standardTaps >= 0) {
       const currentStandardPoints = existingUser?.standard_points || 0;
+      // Standard points also get boost
+      const boostedStandardPoints = standardTaps * boostMultiplier;
       
-      // Store raw standard points (no boost)
-      if (standardTaps > currentStandardPoints) {
-        updateData.standard_points = standardTaps;
+      if (boostedStandardPoints > currentStandardPoints) {
+        updateData.standard_points = boostedStandardPoints;
       }
     }
     
-    // Tap balance can decrease (when tapping) - validate it's not increasing without deposit
+    // Tap balance can decrease (when tapping)
     if (typeof tapBalance === 'number' && tapBalance >= 0) {
       const currentTaps = existingUser?.taps_remaining || 0;
-      // Only allow decrease or same (taps used), not arbitrary increase
       if (tapBalance <= currentTaps || currentTaps === 0) {
         updateData.taps_remaining = tapBalance;
       }
