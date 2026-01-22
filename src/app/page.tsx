@@ -16,20 +16,28 @@ function HomeContent() {
   
   // Boost states
   const [boostPercent, setBoostPercent] = useState<number | null>(null);
+  const [dbPoints, setDbPoints] = useState<number>(0); // Points from DB (already boosted)
   const [boostCode, setBoostCode] = useState('');
   const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [boostMessage, setBoostMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
-  // Fetch boost percent
+  // Fetch boost percent AND points from DB
   const fetchBoost = useCallback(() => {
     if (!address) {
       setBoostPercent(null);
+      setDbPoints(0);
       return;
     }
     fetch(`/api/boost?address=${address}`)
       .then(res => res.json())
-      .then(data => setBoostPercent(data.boostPercent ?? 0))
-      .catch(() => setBoostPercent(0));
+      .then(data => {
+        setBoostPercent(data.boostPercent ?? 0);
+        setDbPoints(data.totalPoints ?? 0);
+      })
+      .catch(() => {
+        setBoostPercent(0);
+        setDbPoints(0);
+      });
   }, [address]);
 
   // Fetch boost percent when address changes + poll every 15 seconds
@@ -272,16 +280,17 @@ function HomeContent() {
         <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 lg:py-8 lg:pr-8 lg:pl-0 min-h-0 mx-auto lg:mx-0">
           {/* Top Row */}
           <div className="grid grid-cols-2 gap-4 mt-2 mb-6 w-full">
-            {/* Points Badge - with boost applied */}
+            {/* Points Badge - from DB (already boosted at earning time) */}
             <div className="bg-green-500 rounded-xl py-3 flex flex-col justify-center items-center shadow-lg shadow-green-500/30">
               <span className="text-lg font-bold text-white tracking-wide">
                 {(() => {
-                  const boostedPoints = points * (1 + (boostPercent || 0) / 100);
+                  // Use points from DB - they are already boosted at earning time
+                  const displayPoints = dbPoints;
                   // Show with 1 decimal if not whole number, always use dot
-                  if (boostedPoints % 1 !== 0) {
-                    return boostedPoints.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+                  if (displayPoints % 1 !== 0) {
+                    return displayPoints.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
                   }
-                  return boostedPoints.toLocaleString('en-US');
+                  return displayPoints.toLocaleString('en-US');
                 })()} pts
               </span>
             </div>

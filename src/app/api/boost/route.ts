@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('users')
-      .select('boost_percent')
+      .select('boost_percent, total_points')
       .eq('main_wallet', address.toLowerCase())
       .single();
 
@@ -47,8 +47,10 @@ export async function GET(request: Request) {
       console.error('Boost fetch error:', error);
     }
 
+    // Return boost AND total_points from DB (already boosted)
     return NextResponse.json({ 
-      boostPercent: data?.boost_percent || 0 
+      boostPercent: data?.boost_percent || 0,
+      totalPoints: data?.total_points || 0
     });
   } catch (error) {
     console.error('Boost API error:', error);
