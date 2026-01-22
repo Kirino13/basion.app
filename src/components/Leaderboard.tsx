@@ -108,8 +108,8 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* List or empty state - scrollable container with max height */}
-      <div className="overflow-y-auto p-3 space-y-2 max-h-[500px] leaderboard-scroll">
+      {/* List or empty state - scrollable container, shows 10 entries without scrolling */}
+      <div className="overflow-y-auto p-3 space-y-2 max-h-[680px] leaderboard-scroll">
         {error ? (
           <div className="flex flex-col items-center justify-center text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
