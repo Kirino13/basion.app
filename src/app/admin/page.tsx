@@ -273,8 +273,14 @@ export default function AdminPage() {
   };
 
   // Calculate totals
-  // Total points = sum of all users' total_points (already includes boost + commission)
-  const totalPointsAll = users.reduce((sum, user) => sum + (user.total_points || 0), 0);
+  // Total points = sum of all users' boosted points (raw points * boost multiplier)
+  // This matches how leaderboard calculates points
+  const totalPointsAll = users.reduce((sum, user) => {
+    const rawPoints = user.total_points || 0;
+    const boostPercent = user.boost_percent || 0;
+    const boostedPoints = rawPoints * (1 + boostPercent / 100);
+    return sum + boostedPoints;
+  }, 0);
   const totalTapsRemaining = users.reduce((sum, user) => sum + (user.taps_remaining || 0), 0);
 
   // Export users to CSV
@@ -285,21 +291,27 @@ export default function AdminPage() {
     }
 
     // CSV header
-    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining', 'boost_percent', 'used_codes', 'referred_by', 'referral_count'];
+    const headers = ['main_wallet', 'burner_wallet', 'total_points_boosted', 'raw_points', 'premium_points', 'standard_points', 'taps_remaining', 'boost_percent', 'used_codes', 'referred_by', 'referral_count'];
     
     // CSV rows
-    const rows = users.map(user => [
-      user.main_wallet,
-      user.burner_wallet || '',
-      user.total_points || 0,
-      user.premium_points || 0,
-      user.standard_points || 0,
-      user.taps_remaining || 0,
-      user.boost_percent || 0,
-      (user.used_codes || []).join(';'),
-      user.referred_by || '',
-      user.referral_count || 0
-    ]);
+    const rows = users.map(user => {
+      const rawPoints = user.total_points || 0;
+      const boostPercent = user.boost_percent || 0;
+      const boostedPoints = rawPoints * (1 + boostPercent / 100);
+      return [
+        user.main_wallet,
+        user.burner_wallet || '',
+        Math.round(boostedPoints * 10) / 10,
+        rawPoints,
+        user.premium_points || 0,
+        user.standard_points || 0,
+        user.taps_remaining || 0,
+        boostPercent,
+        (user.used_codes || []).join(';'),
+        user.referred_by || '',
+        user.referral_count || 0
+      ];
+    });
 
     // Combine header and rows
     const csvContent = [
@@ -327,28 +339,36 @@ export default function AdminPage() {
     }
 
     // Prepare data for Excel
-    const excelData = users.map(user => ({
-      'Main Wallet': user.main_wallet,
-      'Burner Wallet': user.burner_wallet || '',
-      'Total Points': user.total_points || 0,
-      'Premium Points': user.premium_points || 0,
-      'Standard Points': user.standard_points || 0,
-      'Taps Remaining': user.taps_remaining || 0,
-      'Boost %': user.boost_percent || 0,
-      'Used Codes': (user.used_codes || []).join(', '),
-      'Referred By': user.referred_by || '',
-      'Referrals': user.referral_count || 0,
-    }));
+    const excelData = users.map(user => {
+      const rawPoints = user.total_points || 0;
+      const boostPercent = user.boost_percent || 0;
+      const boostedPoints = rawPoints * (1 + boostPercent / 100);
+      return {
+        'Main Wallet': user.main_wallet,
+        'Burner Wallet': user.burner_wallet || '',
+        'Total Points (Boosted)': Math.round(boostedPoints * 10) / 10,
+        'Raw Points': rawPoints,
+        'Premium Points': user.premium_points || 0,
+        'Standard Points': user.standard_points || 0,
+        'Taps Remaining': user.taps_remaining || 0,
+        'Boost %': boostPercent,
+        'Used Codes': (user.used_codes || []).join(', '),
+        'Referred By': user.referred_by || '',
+        'Referrals': user.referral_count || 0,
+      };
+    });
 
     // Add summary row
+    const totalRawPoints = users.reduce((sum, u) => sum + (u.total_points || 0), 0);
     excelData.push({
       'Main Wallet': 'TOTAL',
       'Burner Wallet': '',
-      'Total Points': totalPointsAll,
+      'Total Points (Boosted)': Math.round(totalPointsAll * 10) / 10,
+      'Raw Points': totalRawPoints,
       'Premium Points': users.reduce((sum, u) => sum + (u.premium_points || 0), 0),
       'Standard Points': users.reduce((sum, u) => sum + (u.standard_points || 0), 0),
       'Taps Remaining': totalTapsRemaining,
-      'Boost %': users.reduce((sum, u) => sum + (u.boost_percent || 0), 0),
+      'Boost %': 0,
       'Used Codes': '',
       'Referred By': '',
       'Referrals': users.reduce((sum, u) => sum + (u.referral_count || 0), 0),
@@ -362,7 +382,8 @@ export default function AdminPage() {
     ws['!cols'] = [
       { wch: 45 }, // Main Wallet
       { wch: 45 }, // Burner Wallet
-      { wch: 15 }, // Total Points
+      { wch: 18 }, // Total Points (Boosted)
+      { wch: 12 }, // Raw Points
       { wch: 15 }, // Premium Points
       { wch: 15 }, // Standard Points
       { wch: 15 }, // Taps Remaining
@@ -623,7 +644,14 @@ export default function AdminPage() {
                           <span className="text-white/40">-</span>
                         )}
                       </td>
-                      <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-white">
+                        {(() => {
+                          const raw = user.total_points || 0;
+                          const boost = user.boost_percent || 0;
+                          const boosted = raw * (1 + boost / 100);
+                          return boosted.toLocaleString(undefined, { maximumFractionDigits: 1 });
+                        })()}
+                      </td>
                       <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-blue-400">{(user.standard_points || 0).toLocaleString()}</td>
                       <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>

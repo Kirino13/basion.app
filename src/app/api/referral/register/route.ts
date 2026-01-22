@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-
-// Rate limiting
-const refRegisterRateLimitMap = new Map<string, number>();
-const REF_RATE_WINDOW = 5000; // 5 seconds between referral registrations
+import { referralRegisterLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // POST /api/referral/register
 // Called when user makes first deposit with a referrer
@@ -17,13 +14,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing userWallet' }, { status: 400 });
     }
 
-    // Rate limiting
-    const key = userWallet.toLowerCase();
-    const lastRequest = refRegisterRateLimitMap.get(key);
-    if (lastRequest && Date.now() - lastRequest < REF_RATE_WINDOW) {
+    // Rate limiting via Upstash Redis (3 requests/10s per wallet)
+    const rateLimitResult = await checkRateLimit(referralRegisterLimiter, userWallet.toLowerCase());
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
-    refRegisterRateLimitMap.set(key, Date.now());
 
     // Validate wallet address format
     if (!/^0x[a-fA-F0-9]{40}$/.test(userWallet)) {

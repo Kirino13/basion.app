@@ -1,34 +1,14 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { verifyMessage } from 'viem';
-
-// Rate limiting: max 10 requests per minute per IP
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const RATE_LIMIT = 10;
-const RATE_WINDOW = 60000; // 1 minute
-
-function checkRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = rateLimitMap.get(ip);
-  
-  if (!record || now > record.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
+import { getBurnerLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 export async function GET(request: Request) {
   try {
-    // Rate limiting
+    // Rate limiting via Upstash Redis (10 requests/min per IP)
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    if (!checkRateLimit(ip)) {
+    const rateLimitResult = await checkRateLimit(getBurnerLimiter, ip);
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 

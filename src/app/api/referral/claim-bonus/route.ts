@@ -1,12 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { referralClaimLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 const REFERRAL_BONUS = 10; // +10% boost
 const MAX_REFERRALS = 5;   // Max 5 referrals = 50% boost for referrer
-
-// Rate limiting
-const claimBonusRateLimitMap = new Map<string, number>();
-const CLAIM_RATE_WINDOW = 10000; // 10 seconds between claim attempts
 
 // POST /api/referral/claim-bonus
 // Called on first tap to apply referral bonuses
@@ -25,13 +22,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
     }
 
-    // Rate limiting
-    const key = userWallet.toLowerCase();
-    const lastRequest = claimBonusRateLimitMap.get(key);
-    if (lastRequest && Date.now() - lastRequest < CLAIM_RATE_WINDOW) {
+    // Rate limiting via Upstash Redis (3 requests/30s per wallet)
+    const rateLimitResult = await checkRateLimit(referralClaimLimiter, userWallet.toLowerCase());
+    if (!rateLimitResult.success) {
       return NextResponse.json({ success: true, message: 'Rate limited', bonusApplied: false });
     }
-    claimBonusRateLimitMap.set(key, Date.now());
 
     const supabase = getSupabaseAdmin();
     if (!supabase) {

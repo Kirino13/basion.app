@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { boostRedeemLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // Boost codes from environment (server-side only, NOT NEXT_PUBLIC_)
 // Format: CODE1:AMOUNT,CODE2:AMOUNT (e.g., "BONUS20:20,VIP50:50")
@@ -10,29 +11,6 @@ const BOOST_CODES = new Map<string, number>(
     return [code.trim().toUpperCase(), parseInt(amount) || 20];
   })
 );
-
-// Rate limiting: max 10 code attempts per minute per address
-const codeRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const CODE_RATE_LIMIT = 10;
-const CODE_RATE_WINDOW = 60000;
-
-function checkCodeRateLimit(address: string): boolean {
-  const now = Date.now();
-  const key = address.toLowerCase();
-  const record = codeRateLimitMap.get(key);
-  
-  if (!record || now > record.resetAt) {
-    codeRateLimitMap.set(key, { count: 1, resetAt: now + CODE_RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= CODE_RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
 
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
@@ -49,8 +27,9 @@ export async function POST(request: Request) {
     const normalizedAddress = address.toLowerCase();
     const normalizedCode = code.trim().toUpperCase();
 
-    // Rate limiting
-    if (!checkCodeRateLimit(normalizedAddress)) {
+    // Rate limiting via Upstash Redis (10 attempts/min per wallet)
+    const rateLimitResult = await checkRateLimit(boostRedeemLimiter, normalizedAddress);
+    if (!rateLimitResult.success) {
       return NextResponse.json({ ok: false, error: 'RATE_LIMIT' }, { status: 429 });
     }
 

@@ -1,14 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Trophy, Users } from 'lucide-react';
 import { LeaderboardEntry } from '@/types';
 
-interface LeaderboardProps {
-  currentUserPoints?: number;
-}
-
-const Leaderboard: React.FC<LeaderboardProps> = () => {
+const Leaderboard: React.FC = () => {
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,12 +13,9 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     try {
       setError(null);
       // Add timestamp to prevent caching, fetch all 100 entries
+      // cache: 'no-store' is sufficient, no need for extra headers
       const res = await fetch(`/api/leaderboard?limit=100&t=${Date.now()}`, {
         cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-        },
       });
       
       if (!res.ok) {

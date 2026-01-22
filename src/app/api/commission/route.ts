@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { commissionLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // 10 commission wallets (excluded from paying commission themselves)
 const COMMISSION_WALLETS = [
@@ -17,39 +18,6 @@ const COMMISSION_WALLETS = [
 
 // Commission rate: 10% of points earned per tap
 const COMMISSION_PERCENT = 0.1; // 10%
-
-// Rate limiting to prevent abuse
-const commissionRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const COMMISSION_RATE_LIMIT = 60; // max 60 commission calls per minute
-const COMMISSION_RATE_WINDOW = 60000;
-
-function checkCommissionRateLimit(wallet: string): boolean {
-  const now = Date.now();
-  const key = wallet.toLowerCase();
-  const record = commissionRateLimitMap.get(key);
-  
-  if (!record || now > record.resetAt) {
-    commissionRateLimitMap.set(key, { count: 1, resetAt: now + COMMISSION_RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= COMMISSION_RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
-
-// Cleanup old rate limit entries
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of commissionRateLimitMap.entries()) {
-    if (now > value.resetAt) {
-      commissionRateLimitMap.delete(key);
-    }
-  }
-}, 60000);
 
 // POST /api/commission
 // Body: { fromWallet: string }
@@ -75,8 +43,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'commission_wallet' });
     }
 
-    // Rate limiting
-    if (!checkCommissionRateLimit(normalizedWallet)) {
+    // Rate limiting via Upstash Redis (60 requests/min per wallet)
+    const rateLimitResult = await checkRateLimit(commissionLimiter, normalizedWallet);
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
@@ -86,21 +55,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, skipped: true, reason: 'no_database' });
     }
 
-    // Get tapper's boost percentage to calculate actual points per tap
-    const { data: tapperData } = await supabase
-      .from('users')
-      .select('boost_percent')
-      .eq('main_wallet', normalizedWallet)
-      .single();
-
-    // Calculate points per tap with boost
-    // Base: 1 point, with boost: 1 * (1 + boost_percent/100)
-    const boostPercent = tapperData?.boost_percent || 0;
-    const pointsPerTap = 1 * (1 + boostPercent / 100); // e.g., 1.2 with 20% boost, 1.5 with 50% boost
-    
-    // Commission is 10% of actual points earned
-    const commissionAmount = pointsPerTap * COMMISSION_PERCENT; // e.g., 0.12 with 20% boost
-
+    // Commission is always 10% of base tap (0.1 point)
+    // We store RAW commission (without boost), boost is applied only on display
+    // This keeps consistency with premium_points and standard_points
+    const commissionAmount = 1 * COMMISSION_PERCENT; // Always 0.1
 
     // Select random commission wallet
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
@@ -113,11 +71,9 @@ export async function POST(request: Request) {
       .eq('main_wallet', targetWallet)
       .single();
 
-    let currentCommission = 0;
-
     if (fetchError) {
       // Commission wallet doesn't exist - create it with initial commission
-      const { data: insertData, error: insertError } = await supabase
+      const { error: insertError } = await supabase
         .from('users')
         .insert({
           main_wallet: targetWallet,
@@ -125,8 +81,7 @@ export async function POST(request: Request) {
           premium_points: 0,
           standard_points: 0,
           boost_percent: 0,
-        })
-        .select('total_points, commission_points');
+        });
 
       if (insertError) {
         return NextResponse.json({ ok: false, error: 'Failed to create commission wallet' }, { status: 500 });
@@ -136,14 +91,12 @@ export async function POST(request: Request) {
         ok: true, 
         targetWallet,
         commission: commissionAmount,
-        boostPercent,
-        pointsPerTap,
         created: true
       });
     }
 
     // Add commission to the target wallet's commission_points field
-    currentCommission = Number(targetUser.commission_points) || 0;
+    const currentCommission = Number(targetUser.commission_points) || 0;
     const newCommission = currentCommission + commissionAmount;
 
     const { data: updateData, error: updateError } = await supabase
@@ -156,7 +109,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'Failed to update commission' }, { status: 500 });
     }
 
-    // Verify update was successful
     if (!updateData || updateData.length === 0) {
       return NextResponse.json({ ok: false, error: 'Update returned no rows' }, { status: 500 });
     }
@@ -164,9 +116,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       ok: true, 
       targetWallet,
-      commission: commissionAmount,
-      boostPercent,
-      pointsPerTap
+      commission: commissionAmount
     });
   } catch (error) {
     console.error('Commission error:', error);

@@ -1,39 +1,19 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { boostLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // Disable caching for real-time boost updates
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
-// Rate limiting
-const boostRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const BOOST_RATE_LIMIT = 60;
-const BOOST_RATE_WINDOW = 60000;
-
-function checkBoostRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = boostRateLimitMap.get(ip);
-  
-  if (!record || now > record.resetAt) {
-    boostRateLimitMap.set(ip, { count: 1, resetAt: now + BOOST_RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= BOOST_RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
-
 // GET /api/boost?address=0x...
 // Returns the boost percentage for a user
 export async function GET(request: Request) {
   try {
-    // Rate limiting
+    // Rate limiting via Upstash Redis (60 requests/min per IP)
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    if (!checkBoostRateLimit(ip)) {
+    const rateLimitResult = await checkRateLimit(boostLimiter, ip);
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded', boostPercent: 0 }, { status: 429 });
     }
 

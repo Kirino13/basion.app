@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-
-// Rate limiting: prevent spam burner registration
-const registerRateLimitMap = new Map<string, number>();
-const REGISTER_RATE_WINDOW = 30000; // 30 seconds between registrations per wallet
+import { registerBurnerLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
   try {
@@ -19,13 +16,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid wallet address format' }, { status: 400 });
     }
 
-    // Rate limiting
-    const key = mainWallet.toLowerCase();
-    const lastRequest = registerRateLimitMap.get(key);
-    if (lastRequest && Date.now() - lastRequest < REGISTER_RATE_WINDOW) {
+    // Rate limiting via Upstash Redis (2 requests/30s per wallet)
+    const rateLimitResult = await checkRateLimit(registerBurnerLimiter, mainWallet.toLowerCase());
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
-    registerRateLimitMap.set(key, Date.now());
 
     const supabase = getSupabaseAdmin();
 

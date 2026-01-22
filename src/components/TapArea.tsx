@@ -191,6 +191,10 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       setBubbles((prev) => [...prev, newBubble]);
 
       try {
+        // Optimistically update local state BEFORE transaction
+        // This provides instant feedback to user
+        setLocalTaps(prev => Math.max(0, prev - 1));
+        
         // Send tap transaction via burner wallet and WAIT for confirmation
         const tx = await sendTap();
         
@@ -198,26 +202,31 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         await tx.wait();
         
         // Transaction confirmed! Fetch updated stats from contract
+        // Note: useEffect will sync localTaps with tapBalance from contract
         await refetchGameStats();
         
-        // Update local state
-        setLocalTaps(prev => Math.max(0, prev - 1));
-        
         // On first tap, try to claim referral bonus (if user was invited)
-        if (!referralBonusClaimedRef.current && address) {
-          referralBonusClaimedRef.current = true;
-          try {
-            const bonusResp = await fetch('/api/referral/claim-bonus', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userWallet: address }),
-            });
-            const bonusData = await bonusResp.json();
-            if (bonusData.bonusApplied) {
-              console.log('Referral bonus applied:', bonusData.message);
+        // Use localStorage to persist across page reloads (server is protected anyway)
+        if (address && !referralBonusClaimedRef.current) {
+          const bonusClaimedKey = `basion_referral_claimed_${address.toLowerCase()}`;
+          const alreadyClaimed = localStorage.getItem(bonusClaimedKey) === 'true';
+        
+          if (!alreadyClaimed) {
+            referralBonusClaimedRef.current = true;
+            localStorage.setItem(bonusClaimedKey, 'true'); // Persist across reloads
+            try {
+              const bonusResp = await fetch('/api/referral/claim-bonus', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userWallet: address }),
+              });
+              const bonusData = await bonusResp.json();
+              if (bonusData.bonusApplied) {
+                console.log('Referral bonus applied:', bonusData.message);
+              }
+            } catch (err) {
+              console.error('Failed to claim referral bonus:', err);
             }
-          } catch (err) {
-            console.error('Failed to claim referral bonus:', err);
           }
         }
         

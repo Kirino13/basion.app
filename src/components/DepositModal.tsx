@@ -64,6 +64,22 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
     return '0x0000000000000000000000000000000000000000';
   };
 
+  // Proceed to deposit step (must be defined before useEffects that use it)
+  const proceedToDeposit = useCallback(() => {
+    setStep('depositing');
+    resetWrite();
+    
+    const referrer = getReferrer();
+    
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: BASION_ABI,
+      functionName: 'deposit',
+      args: [BigInt(selectedPackage), referrer],
+      value: parseEther(ethAmount),
+    });
+  }, [selectedPackage, ethAmount, writeContract, resetWrite]);
+
   // Load ETH price on open
   useEffect(() => {
     if (isOpen) {
@@ -135,8 +151,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         }, 2500);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [txConfirmed, step]); // proceedToDeposit/refetchGameStats/onClose are stable
+  }, [txConfirmed, step, proceedToDeposit, refetchGameStats, onClose, onDepositSuccess, address]);
 
   // Handle transaction error
   useEffect(() => {
@@ -153,22 +168,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       }
       setStep('error');
     }
-  }, [txFailed, writeError]);
-
-  const proceedToDeposit = useCallback(() => {
-    setStep('depositing');
-    resetWrite();
-    
-    const referrer = getReferrer();
-    
-    writeContract({
-      address: CONTRACT_ADDRESS,
-      abi: BASION_ABI,
-      functionName: 'deposit',
-      args: [BigInt(selectedPackage), referrer],
-      value: parseEther(ethAmount),
-    });
-  }, [selectedPackage, ethAmount, writeContract, resetWrite]);
+  }, [txFailed, writeError, proceedToDeposit]);
 
   const handleDeposit = async () => {
     if (!address) {

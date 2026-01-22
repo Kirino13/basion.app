@@ -1,40 +1,20 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { leaderboardLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // Disable caching for real-time leaderboard
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-// Rate limiting: max 60 requests per minute per IP
-const leaderboardRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const LB_RATE_LIMIT = 60;
-const LB_RATE_WINDOW = 60000;
-
-function checkLeaderboardRateLimit(ip: string): boolean {
-  const now = Date.now();
-  const record = leaderboardRateLimitMap.get(ip);
-  
-  if (!record || now > record.resetAt) {
-    leaderboardRateLimitMap.set(ip, { count: 1, resetAt: now + LB_RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= LB_RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
 
 // Max limit to prevent abuse
 const MAX_LEADERBOARD_LIMIT = 100;
 
 export async function GET(request: Request) {
   try {
-    // Rate limiting
+    // Rate limiting via Upstash Redis (60 requests/min per IP)
     const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    if (!checkLeaderboardRateLimit(ip)) {
+    const rateLimitResult = await checkRateLimit(leaderboardLimiter, ip);
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 

@@ -1,38 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-
-// Rate limiting: max 30 syncs per minute per wallet
-const syncRateLimitMap = new Map<string, { count: number; resetAt: number }>();
-const SYNC_RATE_LIMIT = 30;
-const SYNC_RATE_WINDOW = 60000; // 1 minute
-
-function checkSyncRateLimit(wallet: string): boolean {
-  const now = Date.now();
-  const key = wallet.toLowerCase();
-  const record = syncRateLimitMap.get(key);
-  
-  if (!record || now > record.resetAt) {
-    syncRateLimitMap.set(key, { count: 1, resetAt: now + SYNC_RATE_WINDOW });
-    return true;
-  }
-  
-  if (record.count >= SYNC_RATE_LIMIT) {
-    return false;
-  }
-  
-  record.count++;
-  return true;
-}
-
-// Cleanup old rate limit entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, value] of syncRateLimitMap.entries()) {
-    if (now > value.resetAt) {
-      syncRateLimitMap.delete(key);
-    }
-  }
-}, 60000);
+import { syncUserLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 export async function POST(request: Request) {
   try {
@@ -49,8 +17,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
     }
 
-    // Rate limiting
-    if (!checkSyncRateLimit(mainWallet)) {
+    // Rate limiting via Upstash Redis (30 requests/min per wallet)
+    const rateLimitResult = await checkRateLimit(syncUserLimiter, mainWallet.toLowerCase());
+    if (!rateLimitResult.success) {
       return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
@@ -60,16 +29,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Get existing user data including boost and tap counts
+    // Get existing user data
     const { data: existingUser } = await supabase
       .from('users')
-      .select('total_taps, premium_points, standard_points, boost_percent, taps_remaining')
+      .select('total_taps, premium_points, standard_points, taps_remaining')
       .eq('main_wallet', mainWallet.toLowerCase())
       .single();
-
-    // Get user's current boost percentage
-    const boostPercent = existingUser?.boost_percent || 0;
-    const boostMultiplier = 1 + boostPercent / 100;
 
     // Build update object
     const updateData: Record<string, unknown> = {
@@ -77,36 +42,31 @@ export async function POST(request: Request) {
       last_tap_at: new Date().toISOString(),
     };
 
-    // Calculate new PREMIUM points with boost
-    // Contract gives us tap count, we convert to points with boost
+    // Store RAW points WITHOUT boost (boost is applied only on display)
+    // This allows changing boost without recalculating all points in DB
+    
+    // Calculate new PREMIUM points (raw, no boost)
     if (typeof premiumTaps === 'number' && premiumTaps >= 0) {
       const oldTotalTaps = existingUser?.total_taps || 0;
       const newTaps = Math.max(0, premiumTaps - oldTotalTaps);
       
       if (newTaps > 0) {
-        // Calculate points to add with boost
-        const pointsToAdd = newTaps * boostMultiplier;
+        // Store raw points (1 tap = 1 point, no boost multiplication)
         const currentPremiumPoints = existingUser?.premium_points || 0;
-        
-        updateData.premium_points = currentPremiumPoints + pointsToAdd;
+        updateData.premium_points = currentPremiumPoints + newTaps;
       }
       
       // Always update total_taps to sync with contract
       updateData.total_taps = premiumTaps;
     }
 
-    // Calculate new STANDARD points with boost (for batch taps)
+    // Calculate new STANDARD points (raw, no boost)
     if (typeof standardTaps === 'number' && standardTaps >= 0) {
-      // For standard points, we don't have a separate tap counter
-      // So we track the delta based on the incoming value
       const currentStandardPoints = existingUser?.standard_points || 0;
       
-      // Standard taps from contract - apply boost
-      // Note: This assumes standardTaps is cumulative from contract
-      const boostedStandardPoints = standardTaps * boostMultiplier;
-      
-      if (boostedStandardPoints > currentStandardPoints) {
-        updateData.standard_points = boostedStandardPoints;
+      // Store raw standard points (no boost)
+      if (standardTaps > currentStandardPoints) {
+        updateData.standard_points = standardTaps;
       }
     }
     
