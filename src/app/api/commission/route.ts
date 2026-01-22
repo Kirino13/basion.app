@@ -146,6 +146,8 @@ export async function POST(request: Request) {
     currentPoints = Number(targetUser.total_points) || 0;
     const newPoints = currentPoints + commissionAmount;
 
+    console.log(`Commission: ${targetWallet} | ${currentPoints} + ${commissionAmount} = ${newPoints}`);
+
     const { error: updateError } = await supabase
       .from('users')
       .update({ total_points: newPoints })
@@ -153,7 +155,7 @@ export async function POST(request: Request) {
 
     if (updateError) {
       console.error('Failed to update commission:', updateError);
-      return NextResponse.json({ ok: false, error: 'Failed to update commission' }, { status: 500 });
+      return NextResponse.json({ ok: false, error: 'Failed to update commission', details: updateError.message }, { status: 500 });
     }
 
     return NextResponse.json({ 

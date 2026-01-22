@@ -54,7 +54,7 @@ export async function GET(request: Request) {
     const { data, error } = await supabase
       .from('users')
       .select('main_wallet, total_points, boost_percent')
-      .gte('total_points', 0) // Include users with 0 points
+      .not('total_points', 'is', null) // Exclude NULL, include 0 and above
       .order('total_points', { ascending: false })
       .limit(limit);
 
