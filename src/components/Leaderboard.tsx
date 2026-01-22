@@ -82,14 +82,14 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full h-full bg-gradient-to-b from-white/40 to-blue-50/20 backdrop-blur-2xl border border-cyan-400/30 rounded-3xl overflow-hidden shadow-lg ring-1 ring-white/60">
+      <div className="flex flex-col w-full bg-gradient-to-b from-white/40 to-blue-50/20 backdrop-blur-2xl border border-cyan-400/30 rounded-3xl overflow-hidden shadow-lg ring-1 ring-white/60">
         <div className="px-5 py-4 border-b border-white/50 bg-white/30 flex items-center gap-3 shadow-sm">
           <div className="p-2 bg-cyan-400/10 border border-cyan-400/20 rounded-xl shadow-inner">
             <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
           </div>
           <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">Leaderboard</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center">
+        <div className="p-8 flex items-center justify-center">
           <div className="animate-pulse text-[#0B1B3A]/50">Loading...</div>
         </div>
       </div>
@@ -97,7 +97,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-gradient-to-b from-white/40 to-blue-50/20 backdrop-blur-2xl border border-cyan-400/30 rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.1),0_0_20px_rgba(0,229,255,0.15)] ring-1 ring-white/60">
+    <div className="flex flex-col w-full bg-gradient-to-b from-white/40 to-blue-50/20 backdrop-blur-2xl border border-cyan-400/30 rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.1),0_0_20px_rgba(0,229,255,0.15)] ring-1 ring-white/60">
       {/* Header */}
       <div className="px-5 py-4 border-b border-white/50 bg-white/30 flex items-center gap-3 shadow-sm relative z-10">
         <div className="p-2 bg-cyan-400/10 border border-cyan-400/20 rounded-xl shadow-inner">
@@ -109,9 +109,9 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
       </div>
 
       {/* List or empty state - scrollable container with max height */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[500px] leaderboard-scroll">
+      <div className="overflow-y-auto p-3 space-y-2 max-h-[500px] leaderboard-scroll">
         {error ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
+          <div className="flex flex-col items-center justify-center text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
             <button 
               onClick={fetchLeaderboard}
@@ -121,7 +121,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             </button>
           </div>
         ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
+          <div className="flex flex-col items-center justify-center text-center py-8">
             <Users className="w-12 h-12 text-[#0B1B3A]/30 mb-3" />
             <p className="text-[#0B1B3A]/50 text-sm">No players yet</p>
             <p className="text-[#0B1B3A]/30 text-xs mt-1">Be the first!</p>
