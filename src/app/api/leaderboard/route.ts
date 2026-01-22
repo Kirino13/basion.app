@@ -53,8 +53,9 @@ export async function GET(request: Request) {
 
     const { data, error } = await supabase
       .from('users')
-      .select('main_wallet, total_points, boost_percent')
-      .gt('total_points', 0) // Only users with points
+      .select('main_wallet, total_points, boost_percent, burner_wallet')
+      .not('burner_wallet', 'is', null) // Only users who made a deposit (have burner wallet)
+      .gte('total_points', 0) // Include users with 0 points
       .order('total_points', { ascending: false })
       .limit(limit);
 

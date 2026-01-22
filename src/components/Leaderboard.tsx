@@ -16,8 +16,8 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const fetchLeaderboard = useCallback(async () => {
     try {
       setError(null);
-      // Add timestamp to prevent caching
-      const res = await fetch(`/api/leaderboard?limit=10&t=${Date.now()}`, {
+      // Add timestamp to prevent caching, fetch all 100 entries
+      const res = await fetch(`/api/leaderboard?limit=100&t=${Date.now()}`, {
         cache: 'no-store',
       });
       
@@ -108,8 +108,8 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* List or empty state */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2">
+      {/* List or empty state - scrollable container with max height */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[500px] leaderboard-scroll">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
