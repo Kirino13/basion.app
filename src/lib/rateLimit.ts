@@ -85,6 +85,15 @@ export const referralClaimLimiter = isRedisConfigured()
     })
   : null;
 
+// Tap API: 60 requests per minute per wallet (for external bots)
+export const tapApiLimiter = isRedisConfigured()
+  ? new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, '1 m'),
+      prefix: 'ratelimit:tap-api',
+    })
+  : null;
+
 // Helper to check rate limit and return result
 export async function checkRateLimit(
   limiter: Ratelimit | null,
