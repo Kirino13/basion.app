@@ -323,19 +323,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         />
       </motion.div>
 
-      {/* Restoring indicator */}
-      {isRestoring && (
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-blue-600 text-sm bg-blue-50/80 px-4 py-2 rounded-lg"
-        >
-          Restoring tap wallet...
-        </motion.p>
-      )}
-
-      {/* Error message */}
-      {error && (
+      {/* Only show deposit-related messages */}
+      {error && (error.includes('deposit') || error.includes('taps')) && (
         <motion.p 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
