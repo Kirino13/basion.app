@@ -76,14 +76,14 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full h-full bg-white/90 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-white/80">
-        <div className="px-5 py-4 border-b border-slate-200/80 flex items-center gap-3 bg-white/50 shrink-0">
-          <div className="p-2 bg-blue-50/80 rounded-xl">
+      <div className="flex flex-col w-full bg-white/95 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.08)] border border-white/90">
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 bg-white shrink-0">
+          <div className="p-2 bg-blue-50 rounded-xl">
             <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
           </div>
-          <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">Leaderboard</h3>
+          <h3 className="text-[#0B1B3A] font-bold text-lg">Leaderboard</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center min-h-0">
+        <div className="h-[500px] flex items-center justify-center">
           <div className="animate-pulse text-slate-400">Loading...</div>
         </div>
       </div>
@@ -91,19 +91,19 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-white/90 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-white/80">
+    <div className="flex flex-col w-full bg-white/95 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.08)] border border-white/90">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-200/80 flex items-center gap-3 bg-white/50 shrink-0">
-        <div className="p-2 bg-blue-50/80 rounded-xl">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3 bg-white shrink-0">
+        <div className="p-2 bg-blue-50 rounded-xl">
           <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
         </div>
-        <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">
+        <h3 className="text-[#0B1B3A] font-bold text-lg">
           Leaderboard
         </h3>
       </div>
 
-      {/* List — scrollable, blue scrollbar, up to 100 users */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-2 min-h-0 leaderboard-scroll">
+      {/* List — scrollable with fixed height, blue scrollbar, up to 100 users */}
+      <div className="h-[500px] overflow-y-auto overflow-x-hidden p-3 space-y-2 leaderboard-scroll">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
@@ -126,13 +126,11 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             return (
               <div
                 key={item.rank}
-                className={`flex items-center justify-between p-3 rounded-[1rem] border border-slate-200/60 bg-white/75 shadow-sm transition-all duration-200 ${
-                  isTop3 ? 'bg-white/85' : 'hover:bg-white/85'
-                }`}
+                className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200/80 shadow-sm"
               >
                 <div className="flex items-center gap-3">
                   {getRankBadge(item.rank)}
-                  <span className="text-[15px] font-bold tracking-wide text-[#0B1B3A]">
+                  <span className="text-[15px] font-semibold text-[#0B1B3A]">
                     {item.wallet.length > 13 
                       ? `${item.wallet.slice(0, 6)}...${item.wallet.slice(-4)}`
                       : item.wallet
@@ -141,7 +139,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
                 </div>
 
                 <span
-                  className={`text-[15px] font-black text-right ${
+                  className={`text-[15px] font-bold text-right ${
                     isTop3 ? 'text-[#0052FF]' : 'text-[#0B1B3A]'
                   }`}
                 >
