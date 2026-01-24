@@ -409,7 +409,7 @@ export default function AdminPage() {
               <Shield className="w-8 h-8 text-blue-400" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
+              <h1 className="text-2xl font-bold text-white">Admin Panel v2</h1>
               <p className="text-white/60 text-sm">Basion.app Management</p>
             </div>
           </div>
