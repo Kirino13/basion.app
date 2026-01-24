@@ -176,11 +176,16 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check tap balance (account for pending transactions)
-      if (localTaps - pendingTxCountRef.current <= 0) {
+      // Check tap balance
+      if (localTaps <= 0) {
         setError('Out of taps! Buy more.');
         onOpenDeposit();
         return;
+      }
+      
+      // Limit pending transactions to prevent nonce issues
+      if (pendingTxCountRef.current >= 3) {
+        return; // Silently wait for some txs to confirm
       }
 
       // Check cooldown (1 second between taps)
@@ -192,13 +197,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       const clientX = e.clientX;
       const clientY = e.clientY;
 
-      // Record tap timing immediately
+      // Record tap timing immediately (allows next tap in 1 second)
       recordTap();
       
       // Increment pending counter
       pendingTxCountRef.current++;
 
-      // Create bubble animation (instant visual feedback)
+      // Create bubble animation (instant visual feedback +1)
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
@@ -207,10 +212,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       };
       setBubbles((prev) => [...prev, newBubble]);
 
-      // Update local taps immediately for responsive UI
-      setLocalTaps(prev => Math.max(0, prev - 1));
-
       // Fire and forget - send transaction without blocking
+      // Points will update from contract after confirmation
       sendTap()
         .then(async (tx) => {
           // Save txHash for authentication
@@ -224,8 +227,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
           completeTap();
           
-          // Fetch updated stats from contract
-          refetchGameStats();
+          // Fetch updated stats from contract (this updates points and taps)
+          await refetchGameStats();
           
           // Call success callback
           if (onTapSuccess) {
@@ -267,10 +270,9 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         .catch((err) => {
           console.error('Tap error:', err);
           
-          // Restore tap on error
+          // Decrement pending on error
           pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
           completeTap();
-          setLocalTaps(prev => prev + 1);
           
           // Analyze error
           const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -280,11 +282,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           } else if (errorMessage.includes('No burner')) {
             setError('Tap wallet not found');
           } else if (errorMessage.includes('nonce')) {
-            // Nonce error - don't show, just retry on next tap
+            // Nonce error - don't show, will resolve on next tap
           } else if (errorMessage.includes('No taps')) {
             setError('Out of taps! Buy more.');
-            setLocalTaps(0);
           }
+          
+          // Refetch to get actual state
+          refetchGameStats();
         });
     },
     [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
