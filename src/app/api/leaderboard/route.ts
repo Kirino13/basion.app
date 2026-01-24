@@ -4,7 +4,9 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
+    // Max 100 users in leaderboard, no more
+    const requestedLimit = parseInt(searchParams.get('limit') || '100');
+    const limit = Math.min(requestedLimit, 100);
 
     const supabase = getSupabaseAdmin();
 
