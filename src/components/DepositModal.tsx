@@ -42,20 +42,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
   const packages = GAME_CONFIG.packages;
   const selectedPkg = packages[selectedPackage];
   
-  // Calculate ETH amount dynamically from USD price
-  // Add 1% buffer for price fluctuation between calculation and transaction
-  const calculateEthAmount = (usdPrice: number, ethPriceUsd: number | null): string => {
-    if (!ethPriceUsd || ethPriceUsd <= 0) {
-      // Fallback to fixed price if ETH price not available
-      return selectedPkg.priceEth;
-    }
-    const ethNeeded = usdPrice / ethPriceUsd;
-    const withBuffer = ethNeeded * 1.01; // 1% buffer
-    return withBuffer.toFixed(6);
-  };
-  
   // Dynamic ETH amount based on current ETH price
-  const ethAmount = calculateEthAmount(selectedPkg.usd, ethPrice);
+  // Add 1% buffer for price fluctuation between calculation and transaction
+  const ethAmount = ethPrice && ethPrice > 0 
+    ? usdToEth(selectedPkg.usd, ethPrice, 1) // 1% buffer
+    : selectedPkg.priceEth; // Fallback to fixed price
 
   // Get referrer from localStorage
   const getReferrer = (): `0x${string}` => {

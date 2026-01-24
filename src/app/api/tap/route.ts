@@ -300,14 +300,31 @@ export async function GET() {
   return NextResponse.json({
     name: 'Basion Tap API',
     version: '1.0',
-    usage: {
-      method: 'POST',
-      body: {
-        wallet: 'Your main wallet address (0x...)',
-        signature: 'Signature of: "Basion tap for {wallet} at {timestamp}"',
-        timestamp: 'Unix timestamp in milliseconds',
-        count: 'Optional: 1-100 taps, default 1',
+    endpoints: {
+      '/api/tap': {
+        method: 'POST',
+        description: 'Send taps using your burner wallet',
+        body: {
+          wallet: 'Your main wallet address (0x...)',
+          signature: 'Signature of: "Basion tap for {wallet} at {timestamp}"',
+          timestamp: 'Unix timestamp in milliseconds',
+          count: 'Optional: 1-100 taps, default 1',
+        },
+      },
+      '/api/user/{address}': {
+        method: 'GET',
+        description: 'Get user status: points, taps remaining, boost, etc.',
+      },
+      '/api/get-burner': {
+        method: 'GET',
+        description: 'Check if user has a burner wallet',
+        query: { wallet: 'Main wallet address' },
       },
     },
+    notes: [
+      'Deposit must be made via the dApp first to create a burner wallet',
+      'Burner wallet must have ETH for gas fees',
+      'Signature proves ownership of wallet - sign with main wallet',
+    ],
   });
 }

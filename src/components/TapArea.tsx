@@ -22,10 +22,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const [referralBonusClaimed, setReferralBonusClaimed] = useState(false);
   
   // Ref for debounced sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
+  const isFirstTapRef = useRef(true);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -251,6 +253,24 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           }).catch(() => {});
         }
 
+        // Claim referral bonus on first tap (if user was referred)
+        if (address && isFirstTapRef.current && !referralBonusClaimed) {
+          isFirstTapRef.current = false;
+          fetch('/api/referral/claim-bonus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userWallet: address }),
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (data.bonusApplied) {
+                setReferralBonusClaimed(true);
+                console.log('Referral bonus applied:', data.message);
+              }
+            })
+            .catch(() => {});
+        }
+
         // Schedule Supabase sync (debounced)
         scheduleSync();
       } catch (err) {
@@ -276,7 +296,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         completeTap();
       }
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned]
+    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;

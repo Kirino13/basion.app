@@ -20,9 +20,11 @@ export async function getEthPrice(): Promise<number> {
   return price;
 }
 
-export function usdToEth(usdAmount: number, ethPrice: number): string {
+export function usdToEth(usdAmount: number, ethPrice: number, bufferPercent: number = 0): string {
   if (ethPrice <= 0) {
     throw new Error('Invalid ETH price');
   }
-  return (usdAmount / ethPrice).toFixed(6);
+  const ethAmount = usdAmount / ethPrice;
+  const withBuffer = bufferPercent > 0 ? ethAmount * (1 + bufferPercent / 100) : ethAmount;
+  return withBuffer.toFixed(6);
 }
