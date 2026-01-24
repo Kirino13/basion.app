@@ -24,10 +24,9 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const pendingSyncRef = useRef(false);
   const isFirstTapRef = useRef(true);
   const lastTxHashRef = useRef<string | null>(null);
-  const pendingTxCountRef = useRef(0);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
-  const { canTap, recordTap, completeTap } = useTapThrottle();
+  const { canTap, recordTap } = useTapThrottle();
   const { 
     tapBalance, 
     points, 
@@ -182,11 +181,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         onOpenDeposit();
         return;
       }
-      
-      // Limit pending transactions to prevent nonce issues
-      if (pendingTxCountRef.current >= 3) {
-        return; // Silently wait for some txs to confirm
-      }
 
       // Check cooldown (1 second between taps)
       if (!canTap()) {
@@ -199,9 +193,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
       // Record tap timing immediately (allows next tap in 1 second)
       recordTap();
-      
-      // Increment pending counter
-      pendingTxCountRef.current++;
 
       // Create bubble animation (instant visual feedback +1)
       const newBubble: FloatingText = {
@@ -222,10 +213,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           
           // Wait for confirmation in background
           await tx.wait();
-          
-          // Decrement pending counter
-          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
-          completeTap();
           
           // Fetch updated stats from contract (this updates points and taps)
           await refetchGameStats();
@@ -270,10 +257,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         .catch((err) => {
           console.error('Tap error:', err);
           
-          // Decrement pending on error
-          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
-          completeTap();
-          
           // Analyze error
           const errorMessage = err instanceof Error ? err.message : 'Unknown error';
           
@@ -291,7 +274,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           refetchGameStats();
         });
     },
-    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
+    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
