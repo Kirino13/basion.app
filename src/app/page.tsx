@@ -4,8 +4,13 @@ import React, { useState, useCallback, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, CircleDollarSign, Zap, Rocket, Send } from 'lucide-react';
 import { useAccount } from 'wagmi';
-import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
+import { useSearchParams } from 'next/navigation';
+import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard, MaintenancePage } from '@/components';
 import { useBasionContract, useReferral } from '@/hooks';
+
+// Check for maintenance mode
+const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+const ADMIN_BYPASS_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || 'basion-admin-2024';
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
@@ -309,6 +314,35 @@ function HomeContent() {
   );
 }
 
+// Wrapper component that checks for admin bypass
+function MaintenanceWrapper() {
+  const searchParams = useSearchParams();
+  const adminKey = searchParams.get('admin');
+  
+  // Check if admin bypass is active (saves to sessionStorage so you don't need ?admin= every time)
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  useEffect(() => {
+    // Check URL parameter
+    if (adminKey === ADMIN_BYPASS_KEY) {
+      sessionStorage.setItem('basion_admin', 'true');
+      setIsAdmin(true);
+      return;
+    }
+    // Check sessionStorage
+    if (sessionStorage.getItem('basion_admin') === 'true') {
+      setIsAdmin(true);
+    }
+  }, [adminKey]);
+
+  // Show maintenance page if enabled AND not admin
+  if (MAINTENANCE_MODE && !isAdmin) {
+    return <MaintenancePage />;
+  }
+
+  return <HomeContent />;
+}
+
 export default function Home() {
   return (
     <Suspense
@@ -318,7 +352,7 @@ export default function Home() {
         </div>
       }
     >
-      <HomeContent />
+      <MaintenanceWrapper />
     </Suspense>
   );
 }

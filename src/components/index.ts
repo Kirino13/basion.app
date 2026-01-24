@@ -6,3 +6,4 @@ export { default as TapArea } from './TapArea';
 export { default as DepositModal } from './DepositModal';
 export { default as Leaderboard } from './Leaderboard';
 export { default as ReferralLink } from './ReferralLink';
+export { default as MaintenancePage } from './MaintenancePage';
