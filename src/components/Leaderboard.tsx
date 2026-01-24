@@ -22,7 +22,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const fetchLeaderboard = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/leaderboard?limit=10');
+      const res = await fetch('/api/leaderboard?limit=100');
       
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
@@ -76,14 +76,14 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full h-full bg-white rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.08)] border border-slate-200/80">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3 bg-white">
-          <div className="p-2 bg-blue-50 rounded-xl">
+      <div className="flex flex-col w-full h-full bg-white/90 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-white/80">
+        <div className="px-5 py-4 border-b border-slate-200/80 flex items-center gap-3 bg-white/50 shrink-0">
+          <div className="p-2 bg-blue-50/80 rounded-xl">
             <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
           </div>
           <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">Leaderboard</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center bg-white">
+        <div className="flex-1 flex items-center justify-center min-h-0">
           <div className="animate-pulse text-slate-400">Loading...</div>
         </div>
       </div>
@@ -91,10 +91,10 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-white rounded-3xl overflow-hidden shadow-[0_12px_40px_rgba(0,0,0,0.08)] border border-slate-200/80">
+    <div className="flex flex-col w-full h-full bg-white/90 backdrop-blur-sm rounded-3xl overflow-hidden shadow-[0_12px_48px_rgba(0,0,0,0.12)] border border-white/80">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3 bg-white shrink-0">
-        <div className="p-2 bg-blue-50 rounded-xl">
+      <div className="px-5 py-4 border-b border-slate-200/80 flex items-center gap-3 bg-white/50 shrink-0">
+        <div className="p-2 bg-blue-50/80 rounded-xl">
           <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
         </div>
         <h3 className="text-[#0B1B3A] font-black text-lg tracking-tight">
@@ -102,8 +102,8 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* List or empty state */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-0">
+      {/* List — scrollable, blue scrollbar, up to 100 users */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-2 min-h-0 leaderboard-scroll">
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
@@ -126,10 +126,8 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             return (
               <div
                 key={item.rank}
-                className={`flex items-center justify-between p-3 rounded-2xl transition-all duration-200 ${
-                  isTop3
-                    ? 'bg-gradient-to-r from-slate-50 to-white border border-slate-100 shadow-sm'
-                    : 'bg-slate-50/80 border border-slate-100 hover:bg-slate-100/80'
+                className={`flex items-center justify-between p-3 rounded-[1rem] border border-slate-200/60 bg-white/75 shadow-sm transition-all duration-200 ${
+                  isTop3 ? 'bg-white/85' : 'hover:bg-white/85'
                 }`}
               >
                 <div className="flex items-center gap-3">
