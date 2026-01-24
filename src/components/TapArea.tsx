@@ -15,7 +15,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
   const [localTaps, setLocalTaps] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [referralBonusClaimed, setReferralBonusClaimed] = useState(false);
@@ -25,6 +24,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const pendingSyncRef = useRef(false);
   const isFirstTapRef = useRef(true);
   const lastTxHashRef = useRef<string | null>(null);
+  const pendingTxCountRef = useRef(0);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -176,32 +176,29 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check tap balance
-      if (localTaps <= 0) {
+      // Check tap balance (account for pending transactions)
+      if (localTaps - pendingTxCountRef.current <= 0) {
         setError('Out of taps! Buy more.');
         onOpenDeposit();
         return;
       }
 
-      // Check cooldown
+      // Check cooldown (1 second between taps)
       if (!canTap()) {
         return; // Silently ignore too fast taps
-      }
-
-      // Check if processing another tap
-      if (isProcessing) {
-        return;
       }
 
       // Get click position from pointer event
       const clientX = e.clientX;
       const clientY = e.clientY;
 
-      // Start tap
-      setIsProcessing(true);
+      // Record tap timing immediately
       recordTap();
+      
+      // Increment pending counter
+      pendingTxCountRef.current++;
 
-      // Create bubble animation (visual feedback while processing)
+      // Create bubble animation (instant visual feedback)
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
@@ -210,85 +207,87 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       };
       setBubbles((prev) => [...prev, newBubble]);
 
-      try {
-        // Send tap transaction via burner wallet and WAIT for confirmation
-        const tx = await sendTap();
-        
-        // Wait for transaction to be mined (1 confirmation)
-        await tx.wait();
-        
-        // Save txHash for authentication
-        const txHash = tx.hash;
-        lastTxHashRef.current = txHash;
-        
-        // Transaction confirmed! Fetch updated stats from contract
-        await refetchGameStats();
-        
-        // Update local state
-        setLocalTaps(prev => Math.max(0, prev - 1));
-        
-        // Call success callback
-        if (onTapSuccess) {
-          onTapSuccess();
-        }
+      // Update local taps immediately for responsive UI
+      setLocalTaps(prev => Math.max(0, prev - 1));
 
-        // Send 10% commission to random admin wallet (fire and forget)
-        // Uses txHash for authentication instead of token
-        if (address) {
-          fetch('/api/commission', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              fromWallet: address,
-              txHash: txHash,
-            }),
-          }).catch(() => {});
-        }
+      // Fire and forget - send transaction without blocking
+      sendTap()
+        .then(async (tx) => {
+          // Save txHash for authentication
+          const txHash = tx.hash;
+          lastTxHashRef.current = txHash;
+          
+          // Wait for confirmation in background
+          await tx.wait();
+          
+          // Decrement pending counter
+          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
+          completeTap();
+          
+          // Fetch updated stats from contract
+          refetchGameStats();
+          
+          // Call success callback
+          if (onTapSuccess) {
+            onTapSuccess();
+          }
 
-        // Claim referral bonus on first tap (if user was referred)
-        if (address && isFirstTapRef.current && !referralBonusClaimed) {
-          isFirstTapRef.current = false;
-          fetch('/api/referral/claim-bonus', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userWallet: address }),
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.bonusApplied) {
-                setReferralBonusClaimed(true);
-                console.log('Referral bonus applied:', data.message);
-              }
+          // Send commission (fire and forget)
+          if (address) {
+            fetch('/api/commission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                fromWallet: address,
+                txHash: txHash,
+              }),
+            }).catch(() => {});
+          }
+
+          // Claim referral bonus on first tap
+          if (address && isFirstTapRef.current && !referralBonusClaimed) {
+            isFirstTapRef.current = false;
+            fetch('/api/referral/claim-bonus', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userWallet: address }),
             })
-            .catch(() => {});
-        }
+              .then(res => res.json())
+              .then(data => {
+                if (data.bonusApplied) {
+                  setReferralBonusClaimed(true);
+                }
+              })
+              .catch(() => {});
+          }
 
-        // Schedule Supabase sync (debounced) with txHash
-        scheduleSync(txHash);
-      } catch (err) {
-        console.error('Tap error:', err);
-        
-        // Analyze error
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        
-        if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
-          setError('Insufficient ETH for gas on tap wallet');
-        } else if (errorMessage.includes('No burner')) {
-          setError('Tap wallet not found');
-        } else if (errorMessage.includes('nonce')) {
-          setError('Too many taps. Please wait.');
-        } else if (errorMessage.includes('No taps')) {
-          setError('Out of taps! Buy more.');
-          setLocalTaps(0);
-        } else {
-          setError('Tap failed. Try again.');
-        }
-      } finally {
-        setIsProcessing(false);
-        completeTap();
-      }
+          // Schedule sync
+          scheduleSync(txHash);
+        })
+        .catch((err) => {
+          console.error('Tap error:', err);
+          
+          // Restore tap on error
+          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
+          completeTap();
+          setLocalTaps(prev => prev + 1);
+          
+          // Analyze error
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          
+          if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
+            setError('Insufficient ETH for gas');
+          } else if (errorMessage.includes('No burner')) {
+            setError('Tap wallet not found');
+          } else if (errorMessage.includes('nonce')) {
+            // Nonce error - don't show, just retry on next tap
+          } else if (errorMessage.includes('No taps')) {
+            setError('Out of taps! Buy more.');
+            setLocalTaps(0);
+          }
+        });
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
+    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
