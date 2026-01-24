@@ -103,7 +103,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
       </div>
 
       {/* List — exactly 10 entries visible, dark blue scrollbar, up to 100 users */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 leaderboard-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 leaderboard-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-8">
             <p className="text-red-500 text-sm">{error}</p>
@@ -126,7 +126,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             return (
               <div
                 key={item.rank}
-                className="flex items-center justify-between px-3 py-[10px] rounded-xl bg-white/80 border border-white/50 shrink-0"
+                className="flex items-center justify-between px-4 py-[14px] rounded-2xl bg-[#c8e8ff]/90 border border-white/60 shrink-0"
               >
                 <div className="flex items-center gap-3">
                   {getRankBadge(item.rank)}
