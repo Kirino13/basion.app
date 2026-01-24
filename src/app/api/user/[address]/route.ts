@@ -49,9 +49,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ addr
       premiumPoints: 0,
       standardPoints: 0,
       totalPoints: 0,
-      pointsMultiplier: 100,
-      isBlacklisted: false,
-      airdropClaimed: false,
+      boostPercent: 0,
+      isBanned: false,
+      referrer: null,
     };
 
     // If Supabase is not configured, return default user data

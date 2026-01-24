@@ -10,9 +10,6 @@ import { BASION_ABI } from '@/config/abi';
 import { useBurnerWallet, useBasionContract } from '@/hooks';
 import { getEthPrice, usdToEth } from '@/lib/price';
 
-// Internal token for sync API calls
-const SYNC_TOKEN = process.env.NEXT_PUBLIC_SYNC_TOKEN || '';
-
 interface DepositModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -109,8 +106,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
           }).catch(() => {});
         }
         
-        // Track deposit in USD
-        if (address) {
+        // Track deposit in USD using txHash for authentication
+        if (address && txHash) {
           const usdAmount = packages[selectedPackage].usd;
           fetch('/api/sync-deposit', {
             method: 'POST',
@@ -118,7 +115,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
             body: JSON.stringify({ 
               wallet: address, 
               usdAmount,
-              _token: SYNC_TOKEN,
+              txHash: txHash,
             }),
           }).catch(() => {});
         }

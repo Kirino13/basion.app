@@ -6,10 +6,6 @@ import { useBurnerWallet, useTapThrottle, useBasionContract } from '@/hooks';
 import { FloatingText } from '@/types';
 import FloatingBubble from './FloatingBubble';
 
-// Internal tokens for API calls
-const SYNC_TOKEN = process.env.NEXT_PUBLIC_SYNC_TOKEN || '';
-const COMMISSION_TOKEN = process.env.NEXT_PUBLIC_COMMISSION_TOKEN || '';
-
 interface TapAreaProps {
   onOpenDeposit: () => void;
   onTapSuccess?: () => void;
@@ -28,6 +24,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
   const isFirstTapRef = useRef(true);
+  const lastTxHashRef = useRef<string | null>(null);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -62,15 +59,19 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   }, [tapBalance]);
 
   // Debounced sync with Supabase (max once per 5 sec)
-  const debouncedSync = useCallback(async () => {
+  const debouncedSync = useCallback(async (txHash?: string) => {
     if (!address || pendingSyncRef.current) return;
+    
+    // Need txHash for authentication
+    const hashToUse = txHash || lastTxHashRef.current;
+    if (!hashToUse) return;
     
     pendingSyncRef.current = true;
     
     try {
       await refetchGameStats();
       
-      // Sync to Supabase
+      // Sync to Supabase with txHash authentication
       await fetch('/api/sync-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,7 +81,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           premiumPoints: premiumPoints,
           standardPoints: standardPoints,
           tapBalance: tapBalance,
-          _token: SYNC_TOKEN,
+          txHash: hashToUse,
         }),
       });
     } catch (err) {
@@ -91,50 +92,36 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   }, [address, refetchGameStats, points, premiumPoints, standardPoints, tapBalance]);
 
   // Schedule sync (with 5 sec debounce)
-  const scheduleSync = useCallback(() => {
+  const scheduleSync = useCallback((txHash?: string) => {
+    if (txHash) {
+      lastTxHashRef.current = txHash;
+    }
     if (syncTimeoutRef.current) {
       clearTimeout(syncTimeoutRef.current);
     }
-    syncTimeoutRef.current = setTimeout(debouncedSync, 5000);
+    syncTimeoutRef.current = setTimeout(() => debouncedSync(txHash), 5000);
   }, [debouncedSync]);
 
-  // Sync on page load (once)
+  // Mark as synced when contract data is loaded (actual sync happens after taps)
   useEffect(() => {
     if (address && !hasSynced && tapBalance >= 0) {
-      const timer = setTimeout(async () => {
-        try {
-          await fetch('/api/sync-user', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mainWallet: address,
-              points: points,
-              premiumPoints: premiumPoints,
-              standardPoints: standardPoints,
-              tapBalance: tapBalance,
-              _token: SYNC_TOKEN,
-            }),
-          });
-          setHasSynced(true);
-        } catch (syncError) {
-          console.error('Failed to sync user stats on load:', syncError);
-        }
-      }, 2000);
-      return () => clearTimeout(timer);
+      // No initial sync needed - data syncs after each tap via txHash
+      setHasSynced(true);
     }
-  }, [address, hasSynced, points, premiumPoints, standardPoints, tapBalance]);
+  }, [address, hasSynced, tapBalance]);
 
   // Cleanup timer on unmount and sync on page unload
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && address) {
+      if (document.visibilityState === 'hidden' && address && lastTxHashRef.current) {
+        // Use sendBeacon with last txHash for authentication
         const data = JSON.stringify({
           mainWallet: address,
           points: points,
           premiumPoints: premiumPoints,
           standardPoints: standardPoints,
           tapBalance: localTaps,
-          _token: SYNC_TOKEN,
+          txHash: lastTxHashRef.current,
         });
         navigator.sendBeacon('/api/sync-user', new Blob([data], { type: 'application/json' }));
       }
@@ -230,6 +217,10 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         // Wait for transaction to be mined (1 confirmation)
         await tx.wait();
         
+        // Save txHash for authentication
+        const txHash = tx.hash;
+        lastTxHashRef.current = txHash;
+        
         // Transaction confirmed! Fetch updated stats from contract
         await refetchGameStats();
         
@@ -242,13 +233,14 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         }
 
         // Send 10% commission to random admin wallet (fire and forget)
-        if (address && COMMISSION_TOKEN) {
+        // Uses txHash for authentication instead of token
+        if (address) {
           fetch('/api/commission', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               fromWallet: address,
-              _token: COMMISSION_TOKEN
+              txHash: txHash,
             }),
           }).catch(() => {});
         }
@@ -271,8 +263,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
             .catch(() => {});
         }
 
-        // Schedule Supabase sync (debounced)
-        scheduleSync();
+        // Schedule Supabase sync (debounced) with txHash
+        scheduleSync(txHash);
       } catch (err) {
         console.error('Tap error:', err);
         

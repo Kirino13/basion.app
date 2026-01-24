@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
+import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 
 // 10 commission wallets
 const COMMISSION_WALLETS = [
@@ -18,28 +20,77 @@ const COMMISSION_WALLETS = [
 // Commission rate: 10% of points per tap
 const COMMISSION_PERCENT = 0.1;
 
-// Internal token for verification - MUST be set in env
-const COMMISSION_TOKEN = process.env.COMMISSION_INTERNAL_TOKEN || process.env.NEXT_PUBLIC_COMMISSION_TOKEN;
+// Internal token for server-to-server calls (from /api/tap)
+const INTERNAL_TOKEN = process.env.COMMISSION_INTERNAL_TOKEN;
+
+// Track processed txHashes to prevent double commission (in-memory, resets on deploy)
+const processedTxHashes = new Set<string>();
 
 /**
  * POST /api/commission
  * Adds 0.1 points to a random commission wallet per tap
+ * 
+ * Authentication options:
+ * 1. Internal token (_token) - for server-to-server calls from /api/tap
+ * 2. Transaction hash (txHash) - verified on-chain to prove real tap
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { fromWallet, _token } = body;
+    const { fromWallet, _token, txHash } = body;
 
     if (!fromWallet) {
       return NextResponse.json({ error: 'Missing fromWallet' }, { status: 400 });
     }
 
-    // Verify internal token
-    if (!COMMISSION_TOKEN || _token !== COMMISSION_TOKEN) {
-      return NextResponse.json({ ok: false, error: 'Invalid token' }, { status: 401 });
-    }
-
     const normalizedWallet = fromWallet.toLowerCase();
+
+    // SECURITY: Require either internal token OR valid txHash
+    const hasInternalToken = INTERNAL_TOKEN && _token === INTERNAL_TOKEN;
+    
+    if (!hasInternalToken) {
+      // No internal token - require txHash verification
+      if (!txHash) {
+        return NextResponse.json({ ok: false, error: 'Missing txHash' }, { status: 401 });
+      }
+
+      // Prevent replay - check if already processed
+      if (processedTxHashes.has(txHash.toLowerCase())) {
+        return NextResponse.json({ ok: true, skipped: true, reason: 'already_processed' });
+      }
+
+      // Verify txHash on-chain
+      try {
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
+        const receipt = await provider.getTransactionReceipt(txHash);
+        
+        if (!receipt) {
+          return NextResponse.json({ ok: false, error: 'Transaction not found' }, { status: 400 });
+        }
+
+        // Check transaction was successful
+        if (receipt.status !== 1) {
+          return NextResponse.json({ ok: false, error: 'Transaction failed' }, { status: 400 });
+        }
+
+        // Check it's to the Basion contract
+        if (receipt.to?.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) {
+          return NextResponse.json({ ok: false, error: 'Invalid contract' }, { status: 400 });
+        }
+
+        // Mark as processed
+        processedTxHashes.add(txHash.toLowerCase());
+        
+        // Clean up old entries (keep only last 10000)
+        if (processedTxHashes.size > 10000) {
+          const entries = Array.from(processedTxHashes);
+          entries.slice(0, 5000).forEach(h => processedTxHashes.delete(h));
+        }
+      } catch (verifyError) {
+        console.error('TX verification error:', verifyError);
+        return NextResponse.json({ ok: false, error: 'Failed to verify transaction' }, { status: 400 });
+      }
+    }
 
     // Validate wallet format
     if (!/^0x[a-fA-F0-9]{40}$/.test(normalizedWallet)) {

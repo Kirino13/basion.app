@@ -23,8 +23,9 @@ export async function POST(request: Request) {
     }
 
     const ts = parseInt(timestamp);
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
-      return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+    // Validate timestamp: not older than 5 min, not more than 1 min in future
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
+      return NextResponse.json({ error: 'Signature expired or invalid timestamp' }, { status: 401 });
     }
 
     const message = `Basion Admin Access ${timestamp}`;
@@ -43,6 +44,11 @@ export async function POST(request: Request) {
 
     if (!wallets || !Array.isArray(wallets) || wallets.length === 0) {
       return NextResponse.json({ error: 'Missing wallets array' }, { status: 400 });
+    }
+
+    // SECURITY: Limit wallets array to prevent DoS
+    if (wallets.length > 100) {
+      return NextResponse.json({ error: 'Maximum 100 wallets per request' }, { status: 400 });
     }
 
     if (!action || !['ban', 'unban'].includes(action)) {

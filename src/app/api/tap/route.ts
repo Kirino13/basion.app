@@ -65,11 +65,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify timestamp is recent (within 5 minutes)
+    // Verify timestamp is recent (within 5 minutes, not more than 1 min in future)
     const ts = parseInt(timestamp);
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
       return NextResponse.json(
-        { success: false, error: 'Signature expired (timestamp too old)' },
+        { success: false, error: 'Signature expired or invalid timestamp' },
         { status: 401 }
       );
     }
