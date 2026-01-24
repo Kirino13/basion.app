@@ -1,12 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
 import { decryptKey } from '@/lib/encryption';
-import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Zap, FileSpreadsheet, KeyRound } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Ban, DollarSign, Percent } from 'lucide-react';
 
 interface UserData {
   main_wallet: string;
@@ -14,13 +13,15 @@ interface UserData {
   total_points: number;
   premium_points: number;
   standard_points: number;
-  total_taps: number;
   taps_remaining: number;
-  boost_percent: number;
-  used_codes: string[];
-  referred_by: string | null;
-  referral_count: number;
-  referral_bonus_claimed: boolean;
+  boost_percent?: number;
+  is_banned?: boolean;
+  banned_at?: string;
+  total_deposit_usd?: number;
+  deposit_count?: number;
+  commission_points?: number;
+  referred_by?: string;
+  referral_count?: number;
 }
 
 interface BurnerData {
@@ -37,101 +38,75 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserData[]>([]);
   const [burners, setBurners] = useState<BurnerData[]>([]);
   const [selectedBurners, setSelectedBurners] = useState<string[]>([]);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isBanning, setIsBanning] = useState(false);
   const [withdrawResult, setWithdrawResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [banResult, setBanResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Admin signature state
+  const [adminSignature, setAdminSignature] = useState<string | null>(null);
+  const [adminTimestamp, setAdminTimestamp] = useState<string | null>(null);
   
   // States for private key reveal
   const [revealedKeys, setRevealedKeys] = useState<Record<string, boolean>>({});
   const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
   const [copiedKeys, setCopiedKeys] = useState<Record<string, boolean>>({});
   
-  // State for copied addresses
-  const [copiedAddresses, setCopiedAddresses] = useState<Record<string, boolean>>({});
-  
-  // State for admin authentication
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [isSigning, setIsSigning] = useState(false);
+  // Stats
+  const [totalDepositUsd, setTotalDepositUsd] = useState(0);
+  const [totalCommission, setTotalCommission] = useState(0);
+  const [bannedCount, setBannedCount] = useState(0);
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
-
-  // Function to sign and authenticate admin
-  const authenticateAdmin = useCallback(async () => {
-    if (!address || !isAdmin) return;
-    
-    setIsSigning(true);
-    setAuthError(null);
-    
+  
+  // Sign message for admin access
+  const signForAdmin = async (): Promise<{ signature: string; timestamp: string } | null> => {
     try {
       const timestamp = Date.now().toString();
       const message = `Basion Admin Access ${timestamp}`;
-      
       const signature = await signMessageAsync({ message });
-      
-      // Test the signature by fetching data
-      const response = await fetch('/api/admin/data', {
-        headers: {
-          'x-admin-address': address,
-          'x-admin-signature': signature,
-          'x-admin-timestamp': timestamp,
-        },
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Authentication failed');
-      }
-      
-      const data = await response.json();
-      const usersData = data.users || [];
-      const burnersData = data.burners || [];
-      
-      // Sort burners to match users order (by main_wallet)
-      const userOrder = new Map<string, number>(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
-      const sortedBurners = [...burnersData].sort((a: BurnerData, b: BurnerData) => {
-        const orderA: number = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
-        const orderB: number = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
-        return orderA - orderB;
-      });
-      
-      setUsers(usersData);
-      setBurners(sortedBurners);
-      setIsAuthenticated(true);
-      setIsLoading(false);
+      setAdminSignature(signature);
+      setAdminTimestamp(timestamp);
+      return { signature, timestamp };
     } catch (error) {
-      console.error('Authentication failed:', error);
-      setAuthError(error instanceof Error ? error.message : 'Authentication failed');
-      setIsAuthenticated(false);
-      setIsLoading(false);
-    } finally {
-      setIsSigning(false);
+      console.error('Failed to sign:', error);
+      return null;
     }
-  }, [address, isAdmin, signMessageAsync]);
+  };
 
-  // Reset auth state when wallet changes
+  // Fetch data on mount
   useEffect(() => {
-    setIsAuthenticated(false);
-    setAuthError(null);
-    if (!isAdmin) {
+    if (isAdmin) {
+      fetchData();
+    } else {
       setIsLoading(false);
     }
-  }, [address, isAdmin]);
+  }, [isAdmin]);
 
-  const fetchData = useCallback(async () => {
-    if (!address || !isAdmin) return;
-    
+  const fetchData = async () => {
     setIsLoading(true);
     try {
-      const timestamp = Date.now().toString();
-      const message = `Basion Admin Access ${timestamp}`;
-      const signature = await signMessageAsync({ message });
+      // Get or refresh signature
+      let sig = adminSignature;
+      let ts = adminTimestamp;
+      
+      if (!sig || !ts || Date.now() - parseInt(ts) > 4 * 60 * 1000) {
+        const signed = await signForAdmin();
+        if (!signed) {
+          setIsLoading(false);
+          return;
+        }
+        sig = signed.signature;
+        ts = signed.timestamp;
+      }
       
       const response = await fetch('/api/admin/data', {
         headers: {
-          'x-admin-address': address,
-          'x-admin-signature': signature,
-          'x-admin-timestamp': timestamp,
+          'x-admin-address': address || '',
+          'x-admin-signature': sig,
+          'x-admin-timestamp': ts,
         },
       });
       
@@ -141,18 +116,17 @@ export default function AdminPage() {
       
       const data = await response.json();
       const usersData = data.users || [];
-      const burnersData = data.burners || [];
-      
-      // Sort burners to match users order (by main_wallet)
-      const userOrder = new Map<string, number>(usersData.map((u: UserData, idx: number) => [u.main_wallet.toLowerCase(), idx]));
-      const sortedBurners = [...burnersData].sort((a: BurnerData, b: BurnerData) => {
-        const orderA: number = userOrder.get(a.main_wallet.toLowerCase()) ?? 999;
-        const orderB: number = userOrder.get(b.main_wallet.toLowerCase()) ?? 999;
-        return orderA - orderB;
-      });
-      
       setUsers(usersData);
-      setBurners(sortedBurners);
+      setBurners(data.burners || []);
+      
+      // Calculate stats
+      const depositTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.total_deposit_usd || 0), 0);
+      const commissionTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.commission_points || 0), 0);
+      const banned = usersData.filter((u: UserData) => u.is_banned).length;
+      
+      setTotalDepositUsd(depositTotal);
+      setTotalCommission(commissionTotal);
+      setBannedCount(banned);
     } catch (error) {
       console.error('Failed to fetch data:', error);
       setUsers([]);
@@ -160,7 +134,7 @@ export default function AdminPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [address, isAdmin, signMessageAsync]);
+  };
 
   const handleSelectBurner = (burnerAddress: string) => {
     setSelectedBurners((prev) =>
@@ -175,6 +149,74 @@ export default function AdminPage() {
       setSelectedBurners(burners.filter((b) => !b.withdrawn).map((b) => b.burner_wallet));
     }
   };
+  
+  const handleSelectUser = (wallet: string) => {
+    setSelectedUsers((prev) =>
+      prev.includes(wallet) ? prev.filter((w) => w !== wallet) : [...prev, wallet]
+    );
+  };
+  
+  const handleSelectAllUsers = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(users.map((u) => u.main_wallet));
+    }
+  };
+  
+  const handleBan = async (action: 'ban' | 'unban') => {
+    if (selectedUsers.length === 0 || !address) return;
+    
+    setIsBanning(true);
+    setBanResult(null);
+    
+    try {
+      // Get fresh signature
+      const signed = await signForAdmin();
+      if (!signed) {
+        setBanResult({ success: false, message: 'Failed to sign' });
+        setIsBanning(false);
+        return;
+      }
+      
+      const response = await fetch('/api/admin/ban', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-address': address,
+          'x-admin-signature': signed.signature,
+          'x-admin-timestamp': signed.timestamp,
+        },
+        body: JSON.stringify({
+          wallets: selectedUsers,
+          action,
+        }),
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setBanResult({
+          success: true,
+          message: `Successfully ${action === 'ban' ? 'banned' : 'unbanned'} ${data.processed} wallet(s)`,
+        });
+        setSelectedUsers([]);
+        fetchData();
+      } else {
+        setBanResult({
+          success: false,
+          message: data.error || `${action} failed`,
+        });
+      }
+    } catch (error) {
+      setBanResult({
+        success: false,
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    } finally {
+      setIsBanning(false);
+    }
+  };
 
   const handleWithdraw = async () => {
     if (selectedBurners.length === 0 || !address) return;
@@ -183,10 +225,18 @@ export default function AdminPage() {
     setWithdrawResult(null);
 
     try {
-      // Sign the withdraw request
-      const timestamp = Date.now().toString();
-      const message = `Basion Admin Withdraw ${timestamp}`;
-      const signature = await signMessageAsync({ message });
+      // Get fresh signature for withdraw
+      const signed = await signForAdmin();
+      if (!signed) {
+        setWithdrawResult({ success: false, message: 'Failed to sign' });
+        setIsWithdrawing(false);
+        return;
+      }
+      
+      // Withdraw requires special message
+      const withdrawTimestamp = Date.now().toString();
+      const withdrawMessage = `Basion Admin Withdraw ${withdrawTimestamp}`;
+      const withdrawSignature = await signMessageAsync({ message: withdrawMessage });
       
       const response = await fetch('/api/admin/withdraw', {
         method: 'POST',
@@ -194,8 +244,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           burnerAddresses: selectedBurners,
           adminWallet: address,
-          signature,
-          timestamp,
+          signature: withdrawSignature,
+          timestamp: withdrawTimestamp,
         }),
       });
 
@@ -263,21 +313,6 @@ export default function AdminPage() {
     }
   };
 
-  // Handle copy address to clipboard
-  const handleCopyAddress = (address: string, uniqueKey: string) => {
-    navigator.clipboard.writeText(address);
-    setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: true }));
-    setTimeout(() => {
-      setCopiedAddresses((prev) => ({ ...prev, [uniqueKey]: false }));
-    }, 2000);
-  };
-
-  // Calculate totals
-  // Points in DB are already boosted (boost applied at earning time)
-  // So we just sum them as-is
-  const totalPointsAll = users.reduce((sum, user) => sum + (user.total_points || 0), 0);
-  const totalTapsRemaining = users.reduce((sum, user) => sum + (user.taps_remaining || 0), 0);
-
   // Export users to CSV
   const handleExportCSV = () => {
     if (users.length === 0) {
@@ -286,21 +321,16 @@ export default function AdminPage() {
     }
 
     // CSV header
-    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'total_taps', 'taps_remaining', 'boost_percent', 'used_codes', 'referred_by', 'referral_count'];
+    const headers = ['main_wallet', 'burner_wallet', 'total_points', 'premium_points', 'standard_points', 'taps_remaining'];
     
-    // CSV rows - points in DB are already boosted
+    // CSV rows
     const rows = users.map(user => [
       user.main_wallet,
       user.burner_wallet || '',
       user.total_points || 0,
       user.premium_points || 0,
       user.standard_points || 0,
-      user.total_taps || 0,
-      user.taps_remaining || 0,
-      user.boost_percent || 0,
-      (user.used_codes || []).join(';'),
-      user.referred_by || '',
-      user.referral_count || 0
+      user.taps_remaining || 0
     ]);
 
     // Combine header and rows
@@ -319,71 +349,6 @@ export default function AdminPage() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  };
-
-  // Export users to Excel
-  const handleExportExcel = () => {
-    if (users.length === 0) {
-      alert('No users to export');
-      return;
-    }
-
-    // Prepare data for Excel - points in DB are already boosted
-    const excelData = users.map(user => ({
-      'Main Wallet': user.main_wallet,
-      'Burner Wallet': user.burner_wallet || '',
-      'Total Points': user.total_points || 0,
-      'Premium Points': user.premium_points || 0,
-      'Standard Points': user.standard_points || 0,
-      'Total Taps': user.total_taps || 0,
-      'Taps Remaining': user.taps_remaining || 0,
-      'Boost %': user.boost_percent || 0,
-      'Used Codes': (user.used_codes || []).join(', '),
-      'Referred By': user.referred_by || '',
-      'Referrals': user.referral_count || 0,
-    }));
-
-    // Add summary row
-    excelData.push({
-      'Main Wallet': 'TOTAL',
-      'Burner Wallet': '',
-      'Total Points': totalPointsAll,
-      'Premium Points': users.reduce((sum, u) => sum + (u.premium_points || 0), 0),
-      'Standard Points': users.reduce((sum, u) => sum + (u.standard_points || 0), 0),
-      'Total Taps': users.reduce((sum, u) => sum + (u.total_taps || 0), 0),
-      'Taps Remaining': totalTapsRemaining,
-      'Boost %': 0,
-      'Used Codes': '',
-      'Referred By': '',
-      'Referrals': users.reduce((sum, u) => sum + (u.referral_count || 0), 0),
-    });
-
-    // Create workbook and worksheet
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(excelData);
-
-    // Set column widths
-    ws['!cols'] = [
-      { wch: 45 }, // Main Wallet
-      { wch: 45 }, // Burner Wallet
-      { wch: 14 }, // Total Points
-      { wch: 15 }, // Premium Points
-      { wch: 15 }, // Standard Points
-      { wch: 12 }, // Total Taps
-      { wch: 15 }, // Taps Remaining
-      { wch: 10 }, // Boost %
-      { wch: 25 }, // Used Codes
-      { wch: 45 }, // Referred By
-      { wch: 10 }, // Referrals
-    ];
-
-    XLSX.utils.book_append_sheet(wb, ws, 'Users');
-
-    // Generate filename with date
-    const filename = `basion_users_${new Date().toISOString().split('T')[0]}.xlsx`;
-    
-    // Download file
-    XLSX.writeFile(wb, filename);
   };
 
   // Not connected
@@ -414,49 +379,6 @@ export default function AdminPage() {
     );
   }
 
-  // Admin needs to authenticate with signature
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 flex items-center justify-center p-4">
-        <div className="bg-white/10 backdrop-blur-xl rounded-3xl p-8 max-w-md w-full text-center">
-          <KeyRound className="w-16 h-16 text-blue-400 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-white mb-4">Admin Authentication</h1>
-          <p className="text-white/60 mb-6">
-            Sign a message with your wallet to verify admin access.
-          </p>
-          
-          {authError && (
-            <div className="mb-4 p-3 bg-red-500/20 rounded-lg text-red-400 text-sm">
-              {authError}
-            </div>
-          )}
-          
-          <button
-            onClick={authenticateAdmin}
-            disabled={isSigning}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2"
-          >
-            {isSigning ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                Signing...
-              </>
-            ) : (
-              <>
-                <KeyRound className="w-5 h-5" />
-                Sign to Authenticate
-              </>
-            )}
-          </button>
-          
-          <p className="text-white/40 text-xs mt-4">
-            This signature proves you own the admin wallet and is valid for this session only.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-800 p-6">
       <div className="max-w-7xl mx-auto">
@@ -472,22 +394,14 @@ export default function AdminPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 px-3 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 rounded-lg hover:bg-green-500/30 transition-all"
               title="Export Users to CSV"
             >
               <Download className="w-4 h-4" />
-              <span className="text-sm font-medium">CSV</span>
-            </button>
-            <button
-              onClick={handleExportExcel}
-              className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 rounded-lg hover:bg-blue-500/30 transition-all"
-              title="Export Users to Excel"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span className="text-sm font-medium">Excel</span>
+              <span className="text-sm font-medium">Export CSV</span>
             </button>
             <button
               onClick={fetchData}
@@ -501,7 +415,7 @@ export default function AdminPage() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
               <Users className="w-5 h-5 text-blue-400" />
@@ -512,62 +426,100 @@ export default function AdminPage() {
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <Zap className="w-5 h-5 text-yellow-400" />
-              <span className="text-white/60">Total Points</span>
+              <DollarSign className="w-5 h-5 text-green-400" />
+              <span className="text-white/60">Total Deposits</span>
             </div>
-            <p className="text-3xl font-bold text-yellow-400">{totalPointsAll.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-white">${totalDepositUsd.toFixed(0)}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <Zap className="w-5 h-5 text-orange-400" />
-              <span className="text-white/60">Taps Remaining</span>
+              <Percent className="w-5 h-5 text-yellow-400" />
+              <span className="text-white/60">Commission Pts</span>
             </div>
-            <p className="text-3xl font-bold text-orange-400">{totalTapsRemaining.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-white">{totalCommission.toFixed(1)}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <Wallet className="w-5 h-5 text-green-400" />
-              <span className="text-white/60">Burner Wallets</span>
+              <Wallet className="w-5 h-5 text-cyan-400" />
+              <span className="text-white/60">Burners</span>
             </div>
             <p className="text-3xl font-bold text-white">{burners.length}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <ArrowDownToLine className="w-5 h-5 text-cyan-400" />
-              <span className="text-white/60">Pending Withdraw</span>
+              <Ban className="w-5 h-5 text-red-400" />
+              <span className="text-white/60">Banned</span>
             </div>
-            <p className="text-3xl font-bold text-white">{burners.filter((b) => !b.withdrawn).length}</p>
+            <p className="text-3xl font-bold text-white">{bannedCount}</p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <Shield className="w-5 h-5 text-purple-400" />
-              <span className="text-white/60">Selected</span>
+              <ArrowDownToLine className="w-5 h-5 text-purple-400" />
+              <span className="text-white/60">Pending</span>
             </div>
-            <p className="text-3xl font-bold text-white">{selectedBurners.length}</p>
+            <p className="text-3xl font-bold text-white">{burners.filter((b) => !b.withdrawn).length}</p>
           </div>
         </div>
 
-        {/* Withdraw Result */}
+        {/* Results */}
         {withdrawResult && (
           <div
-            className={`mb-6 p-4 rounded-xl ${
+            className={`mb-4 p-4 rounded-xl ${
               withdrawResult.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
             }`}
           >
             {withdrawResult.message}
           </div>
         )}
+        
+        {banResult && (
+          <div
+            className={`mb-4 p-4 rounded-xl ${
+              banResult.success ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+            }`}
+          >
+            {banResult.message}
+          </div>
+        )}
 
         {/* Users Table */}
         <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6 mb-8">
-          <h2 className="text-xl font-bold text-white mb-4">Users</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-white">Users</h2>
+            
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleSelectAllUsers}
+                className="px-4 py-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition-all text-sm"
+              >
+                {selectedUsers.length === users.length ? 'Deselect All' : 'Select All'}
+              </button>
+              
+              <button
+                onClick={() => handleBan('ban')}
+                disabled={selectedUsers.length === 0 || isBanning}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm flex items-center gap-2"
+              >
+                <Ban className="w-4 h-4" />
+                {isBanning ? 'Banning...' : `Ban (${selectedUsers.length})`}
+              </button>
+              
+              <button
+                onClick={() => handleBan('unban')}
+                disabled={selectedUsers.length === 0 || isBanning}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm flex items-center gap-2"
+              >
+                Unban ({selectedUsers.length})
+              </button>
+            </div>
+          </div>
 
           {isLoading ? (
-            <div className="text-center py-8 text-white/60">Loading...</div>
+            <div className="text-center py-8 text-white/60">Loading... (sign message if prompted)</div>
           ) : users.length === 0 ? (
             <div className="text-center py-8 text-white/60">No users yet</div>
           ) : (
@@ -575,67 +527,51 @@ export default function AdminPage() {
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-white/60 border-b border-white/10">
+                    <th className="pb-3 font-medium w-10"></th>
                     <th className="pb-3 font-medium">Main Wallet</th>
-                    <th className="pb-3 font-medium">Burner</th>
+                    <th className="pb-3 font-medium">Deposit $</th>
                     <th className="pb-3 font-medium">Total Pts</th>
-                    <th className="pb-3 font-medium">Premium</th>
-                    <th className="pb-3 font-medium">Standard</th>
-                    <th className="pb-3 font-medium">Taps Left</th>
-                    <th className="pb-3 font-medium">Boost</th>
-                    <th className="pb-3 font-medium">Refs</th>
+                    <th className="pb-3 font-medium">Commission</th>
+                    <th className="pb-3 font-medium">Boost %</th>
+                    <th className="pb-3 font-medium">Taps</th>
+                    <th className="pb-3 font-medium">Referrals</th>
+                    <th className="pb-3 font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((user) => (
-                    <tr key={user.main_wallet} className="border-b border-white/5">
+                    <tr key={user.main_wallet} className={`border-b border-white/5 ${user.is_banned ? 'bg-red-500/10' : ''}`}>
                       <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white">
-                            {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(user.main_wallet, `user-main-${user.main_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`user-main-${user.main_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.includes(user.main_wallet)}
+                          onChange={() => handleSelectUser(user.main_wallet)}
+                          className="w-4 h-4 rounded"
+                        />
                       </td>
-                      <td className="py-3">
-                        {user.burner_wallet ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-sm text-white/60">
-                              {user.burner_wallet.slice(0, 8)}...{user.burner_wallet.slice(-6)}
-                            </span>
-                            <button
-                              onClick={() => handleCopyAddress(user.burner_wallet, `user-burner-${user.burner_wallet}`)}
-                              className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                              title="Copy address"
-                            >
-                              {copiedAddresses[`user-burner-${user.burner_wallet}`] ? (
-                                <Check className="w-3 h-3 text-green-400" />
-                              ) : (
-                                <Copy className="w-3 h-3" />
-                              )}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-white/40">-</span>
+                      <td className="py-3 font-mono text-sm text-white">
+                        {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
+                      </td>
+                      <td className="py-3 text-green-400 font-bold">
+                        ${(user.total_deposit_usd || 0).toFixed(0)}
+                        {user.deposit_count && user.deposit_count > 1 && (
+                          <span className="text-white/40 text-xs ml-1">({user.deposit_count}x)</span>
                         )}
                       </td>
-                      <td className="py-3 text-white">
-                        {(user.total_points || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                      </td>
-                      <td className="py-3 text-green-400">{(user.premium_points || 0).toLocaleString()}</td>
-                      <td className="py-3 text-blue-400">{(user.standard_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-yellow-400">{(user.commission_points || 0).toFixed(1)}</td>
+                      <td className="py-3 text-purple-400">{user.boost_percent || 0}%</td>
                       <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>
-                      <td className="py-3 text-purple-400 font-medium">{user.boost_percent || 0}%</td>
                       <td className="py-3 text-cyan-400">{user.referral_count || 0}</td>
+                      <td className="py-3">
+                        {user.is_banned ? (
+                          <span className="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs flex items-center gap-1">
+                            <Ban className="w-3 h-3" /> Banned
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">Active</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -699,41 +635,11 @@ export default function AdminPage() {
                           className="w-4 h-4 rounded"
                         />
                       </td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white">
-                            {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(burner.burner_wallet, `burner-${burner.burner_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`burner-${burner.burner_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 font-mono text-sm text-white">
+                        {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
                       </td>
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-sm text-white/60">
-                            {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
-                          </span>
-                          <button
-                            onClick={() => handleCopyAddress(burner.main_wallet, `burner-main-${burner.main_wallet}`)}
-                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
-                            title="Copy address"
-                          >
-                            {copiedAddresses[`burner-main-${burner.main_wallet}`] ? (
-                              <Check className="w-3 h-3 text-green-400" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 font-mono text-sm text-white/60">
+                        {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
                       </td>
                       <td className="py-3 text-white">{burner.balance || '-'} ETH</td>
                       <td className="py-3">

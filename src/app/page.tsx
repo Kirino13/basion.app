@@ -2,21 +2,10 @@
 
 import React, { useState, useCallback, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, CircleDollarSign, Zap, Rocket, Send } from 'lucide-react';
+import { Copy, Check, CircleDollarSign, Zap, Gift, Loader2 } from 'lucide-react';
 import { useAccount } from 'wagmi';
-import { useSearchParams } from 'next/navigation';
-import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard, MaintenancePage } from '@/components';
+import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
 import { useBasionContract, useReferral } from '@/hooks';
-
-// Check for maintenance mode - v2
-const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
-const ADMIN_BYPASS_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || 'basion-admin-2024';
-
-// Debug: log maintenance mode status (remove after testing)
-if (typeof window !== 'undefined') {
-  console.log('[Basion] Maintenance mode:', MAINTENANCE_MODE);
-  console.log('[Basion] Env value:', process.env.NEXT_PUBLIC_MAINTENANCE_MODE);
-}
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
@@ -25,54 +14,31 @@ function HomeContent() {
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   
-  // Boost states
-  const [boostPercent, setBoostPercent] = useState<number | null>(null);
-  const [dbPoints, setDbPoints] = useState<number>(0); // Points from DB (already boosted)
+  // Boost code state
   const [boostCode, setBoostCode] = useState('');
-  const [isApplyingCode, setIsApplyingCode] = useState(false);
+  const [boostPercent, setBoostPercent] = useState(0);
+  const [isRedeemingBoost, setIsRedeemingBoost] = useState(false);
   const [boostMessage, setBoostMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  
-  // Fetch boost percent AND points from DB
-  const fetchBoost = useCallback(() => {
-    if (!address) {
-      setBoostPercent(null);
-      setDbPoints(0);
-      return;
+
+  // Fetch boost on mount
+  useEffect(() => {
+    if (address) {
+      fetch(`/api/boost?address=${address}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.boostPercent) {
+            setBoostPercent(data.boostPercent);
+          }
+        })
+        .catch(() => {});
     }
-    fetch(`/api/boost?address=${address}`)
-      .then(res => res.json())
-      .then(data => {
-        setBoostPercent(data.boostPercent ?? 0);
-        setDbPoints(data.totalPoints ?? 0);
-      })
-      .catch(() => {
-        setBoostPercent(0);
-        setDbPoints(0);
-      });
   }, [address]);
 
-  // Fetch boost percent when address changes + poll every 15 seconds
-  useEffect(() => {
-    fetchBoost();
+  // Redeem boost code
+  const handleRedeemBoost = async () => {
+    if (!address || !boostCode.trim()) return;
     
-    // Poll for boost updates (for when referrals tap)
-    const interval = setInterval(fetchBoost, 15000);
-    return () => clearInterval(interval);
-  }, [fetchBoost]);
-
-  // Clear boost message after 3 seconds
-  useEffect(() => {
-    if (boostMessage) {
-      const timer = setTimeout(() => setBoostMessage(null), 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [boostMessage]);
-
-  // Apply boost code
-  const handleApplyCode = async () => {
-    if (!address || !boostCode.trim() || isApplyingCode) return;
-    
-    setIsApplyingCode(true);
+    setIsRedeemingBoost(true);
     setBoostMessage(null);
     
     try {
@@ -87,34 +53,31 @@ function HomeContent() {
       if (data.ok) {
         setBoostPercent(data.boostPercent);
         setBoostCode('');
-        setBoostMessage({ type: 'success', text: `+${data.addedBoost}% applied!` });
+        setBoostMessage({ type: 'success', text: `+${data.addedBoost}% boost added!` });
       } else {
-        const errorText = data.error === 'INVALID_CODE' ? 'Invalid code' 
-          : data.error === 'CODE_ALREADY_USED' ? 'Code already used'
-          : 'Failed to apply';
-        setBoostMessage({ type: 'error', text: errorText });
+        const errorMap: Record<string, string> = {
+          'INVALID_CODE': 'Invalid code',
+          'CODE_ALREADY_USED': 'Code already used',
+        };
+        setBoostMessage({ type: 'error', text: errorMap[data.error] || 'Failed to redeem' });
       }
     } catch {
       setBoostMessage({ type: 'error', text: 'Network error' });
     } finally {
-      setIsApplyingCode(false);
+      setIsRedeemingBoost(false);
+      setTimeout(() => setBoostMessage(null), 3000);
     }
   };
-
+  
   // Refetch stats when tap succeeds (blockchain confirmed)
   const handleTapSuccess = useCallback(() => {
     refetchGameStats();
-    // Also refetch boost (in case referral bonus was applied on first tap)
-    fetchBoost();
-  }, [refetchGameStats, fetchBoost]);
+  }, [refetchGameStats]);
 
   // Called when deposit is successful
-  const handleDepositSuccess = useCallback(async () => {
-    // Refetch with retries to ensure UI updates
-    await refetchGameStats(3, 1000);
-    // Also refresh boost in case it was set
-    fetchBoost();
-  }, [refetchGameStats, fetchBoost]);
+  const handleDepositSuccess = useCallback(() => {
+    refetchGameStats();
+  }, [refetchGameStats]);
 
   const handleInvite = async () => {
     if (!address) return;
@@ -155,8 +118,7 @@ function HomeContent() {
             )}
 
             {/* Bottom Action Area - buttons increased by 30% */}
-            <div className="w-full flex flex-col px-2 mt-16 gap-3">
-              {/* Row 1: Deposit / Taps / Invite */}
+            <div className="w-full flex flex-col px-2 mt-16">
               <div className="w-full flex flex-row items-center justify-center gap-3">
                 {/* Deposit Button */}
                 <button
@@ -205,66 +167,62 @@ function HomeContent() {
                         animate={{ scale: 1, opacity: 1 }}
                         className="flex items-center gap-2"
                       >
-                        <Copy size={22} className="text-blue-600" /> Invite +10%
+                        <Copy size={22} className="text-blue-600" /> Invite
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </button>
               </div>
 
-              {/* Row 2: Boost Button / Code Input */}
-              <div className="w-full flex flex-row items-center justify-center gap-3">
-                {/* Boost Button */}
-                <button
-                  className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all flex items-center justify-center gap-2 cursor-default"
-                  title="Your boost is applied to points"
-                >
-                  <Rocket size={22} className="text-blue-600" />
-                  <span>
-                    Boost {boostPercent === null ? '--' : boostPercent}%
-                  </span>
-                </button>
-
-                {/* Code Input + Apply */}
-                <div className="flex-1 bg-white py-2 px-3 rounded-2xl shadow-xl shadow-blue-900/10 flex items-center gap-2">
-                  <input
-                    type="text"
-                    placeholder="Code for Boost +20%"
-                    value={boostCode}
-                    onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
-                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
-                    disabled={!isConnected || isApplyingCode}
-                    className="flex-1 bg-transparent text-slate-900 font-bold text-base placeholder:text-slate-400 outline-none min-w-0 py-2"
-                  />
-                  <button
-                    onClick={handleApplyCode}
-                    disabled={!isConnected || !boostCode.trim() || isApplyingCode}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed p-2 rounded-xl transition-all active:scale-95"
-                  >
-                    {isApplyingCode ? (
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <Send size={20} className="text-white" />
+              {/* Boost Code Input */}
+              {isConnected && (
+                <div className="mt-4 w-full">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={boostCode}
+                      onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
+                      placeholder="Enter boost code"
+                      className="flex-1 bg-white/80 px-4 py-3 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <button
+                      onClick={handleRedeemBoost}
+                      disabled={!boostCode.trim() || isRedeemingBoost}
+                      className="bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-3 rounded-xl text-white font-bold shadow-lg transition-all flex items-center gap-2"
+                    >
+                      {isRedeemingBoost ? (
+                        <Loader2 size={20} className="animate-spin" />
+                      ) : (
+                        <Gift size={20} />
+                      )}
+                      Redeem
+                    </button>
+                  </div>
+                  
+                  {/* Boost status */}
+                  <div className="mt-2 flex items-center justify-between">
+                    {boostPercent > 0 && (
+                      <span className="text-sm font-medium text-purple-600 bg-purple-100 px-3 py-1 rounded-full">
+                        Boost: +{boostPercent}%
+                      </span>
                     )}
-                  </button>
+                    <AnimatePresence>
+                      {boostMessage && (
+                        <motion.span
+                          initial={{ opacity: 0, y: -10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className={`text-sm font-medium ${
+                            boostMessage.type === 'success' ? 'text-green-600' : 'text-red-500'
+                          }`}
+                        >
+                          {boostMessage.text}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
-              </div>
-
-              {/* Boost Message */}
-              <AnimatePresence>
-                {boostMessage && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className={`text-center text-sm font-medium ${
-                      boostMessage.type === 'success' ? 'text-green-600' : 'text-red-500'
-                    }`}
-                  >
-                    {boostMessage.text}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              )}
             </div>
           </div>
 
@@ -291,19 +249,9 @@ function HomeContent() {
         <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 lg:py-8 lg:pr-8 lg:pl-0 min-h-0 mx-auto lg:mx-0">
           {/* Top Row */}
           <div className="grid grid-cols-2 gap-4 mt-2 mb-6 w-full">
-            {/* Points Badge - from DB (already boosted at earning time) */}
+            {/* Points Badge */}
             <div className="bg-green-500 rounded-xl py-3 flex flex-col justify-center items-center shadow-lg shadow-green-500/30">
-              <span className="text-lg font-bold text-white tracking-wide">
-                {(() => {
-                  // Use points from DB - they are already boosted at earning time
-                  const displayPoints = dbPoints;
-                  // Show with 1 decimal if not whole number, always use dot
-                  if (displayPoints % 1 !== 0) {
-                    return displayPoints.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-                  }
-                  return displayPoints.toLocaleString('en-US');
-                })()} pts
-              </span>
+              <span className="text-lg font-bold text-white tracking-wide">{points.toLocaleString()} pts</span>
             </div>
 
             {/* Connect Wallet */}
@@ -312,41 +260,12 @@ function HomeContent() {
 
           {/* Leaderboard */}
           <div className="flex-1 min-h-0 w-full mb-4">
-            <Leaderboard />
+            <Leaderboard currentUserPoints={points} />
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-// Wrapper component that checks for admin bypass
-function MaintenanceWrapper() {
-  const searchParams = useSearchParams();
-  const adminKey = searchParams.get('admin');
-  
-  // Check if admin bypass is active (saves to sessionStorage so you don't need ?admin= every time)
-  const [isAdmin, setIsAdmin] = useState(false);
-  
-  useEffect(() => {
-    // Check URL parameter
-    if (adminKey === ADMIN_BYPASS_KEY) {
-      sessionStorage.setItem('basion_admin', 'true');
-      setIsAdmin(true);
-      return;
-    }
-    // Check sessionStorage
-    if (sessionStorage.getItem('basion_admin') === 'true') {
-      setIsAdmin(true);
-    }
-  }, [adminKey]);
-
-  // Show maintenance page if enabled AND not admin
-  if (MAINTENANCE_MODE && !isAdmin) {
-    return <MaintenancePage />;
-  }
-
-  return <HomeContent />;
 }
 
 export default function Home() {
@@ -358,7 +277,7 @@ export default function Home() {
         </div>
       }
     >
-      <MaintenanceWrapper />
+      <HomeContent />
     </Suspense>
   );
 }

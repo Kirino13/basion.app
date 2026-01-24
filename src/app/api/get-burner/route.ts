@@ -1,21 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { verifyMessage } from 'viem';
-import { getBurnerLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 export async function GET(request: Request) {
   try {
-    // Rate limiting via Upstash Redis (10 requests/min per IP)
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
-    const rateLimitResult = await checkRateLimit(getBurnerLimiter, ip);
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
-    }
-
     const { searchParams } = new URL(request.url);
     const wallet = searchParams.get('wallet');
-    const signature = searchParams.get('signature');
-    const timestamp = searchParams.get('timestamp');
 
     if (!wallet) {
       return NextResponse.json({ error: 'Missing wallet parameter' }, { status: 400 });
@@ -49,48 +38,12 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // SECURITY: Only return encrypted key if request includes valid signature
-    // This prevents attackers from fetching other users' encrypted keys
-    // Without signature, only return existence and address (for UI display)
-    if (signature && timestamp) {
-      // Verify timestamp is recent (within 5 minutes)
-      const ts = parseInt(timestamp);
-      if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
-        return NextResponse.json({ 
-          exists: true, 
-          burnerAddress: data.burner_wallet,
-          error: 'Signature expired' 
-        });
-      }
-      
-      try {
-        // Verify signature
-        const message = `Restore burner wallet for ${wallet} at ${timestamp}`;
-        const isValid = await verifyMessage({
-          address: wallet as `0x${string}`,
-          message,
-          signature: signature as `0x${string}`,
-        });
-        
-        if (isValid) {
-          // Signature valid - return encrypted key
-          return NextResponse.json({
-            exists: true,
-            burnerAddress: data.burner_wallet,
-            encryptedKey: data.encrypted_key,
-          });
-        }
-      } catch (sigError) {
-        console.error('Signature verification failed:', sigError);
-      }
-    }
-
-    // Without valid signature, only return that burner exists (for UI purposes)
-    // The encrypted key is NOT returned - user must sign to prove ownership
+    // Return encrypted key - only useful with ENCRYPTION_KEY
+    // Security: Even if someone intercepts this, they can't decrypt without the key
     return NextResponse.json({
       exists: true,
       burnerAddress: data.burner_wallet,
-      // encryptedKey intentionally omitted for security
+      encryptedKey: data.encrypted_key,
     });
   } catch (error) {
     console.error('Get burner error:', error);

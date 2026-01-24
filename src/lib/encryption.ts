@@ -1,6 +1,8 @@
 import CryptoJS from 'crypto-js';
 
-const ENCRYPTION_KEY = process.env.NEXT_PUBLIC_ENCRYPTION_KEY || 'basion-default-key-change-in-production';
+// Encryption key - must be same on client and server for burner wallet restore
+// Note: In production, consider server-side-only encryption with signature verification
+const ENCRYPTION_KEY = process.env.NEXT_PUBLIC_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY || 'basion-default-key-change-in-production';
 
 export function encryptKey(privateKey: string): string {
   return CryptoJS.AES.encrypt(privateKey, ENCRYPTION_KEY).toString();

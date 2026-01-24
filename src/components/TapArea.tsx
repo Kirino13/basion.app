@@ -17,13 +17,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
   
   // Ref for debounced sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingSyncRef = useRef(false);
-  
-  // Ref to track if referral bonus has been claimed this session
-  const referralBonusClaimedRef = useRef(false);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -36,6 +34,21 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     address, 
     refetchGameStats 
   } = useBasionContract();
+
+  // Check if user is banned
+  useEffect(() => {
+    if (address) {
+      fetch(`/api/admin/ban?wallet=${address}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.isBanned) {
+            setIsBanned(true);
+            setError('Your wallet is banned');
+          }
+        })
+        .catch(() => {});
+    }
+  }, [address]);
 
   // Sync local state with contract
   useEffect(() => {
@@ -148,6 +161,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Clear previous error
       setError(null);
 
+      // Check if banned
+      if (isBanned) {
+        setError('Your wallet is banned');
+        return;
+      }
+
       // Check connection
       if (!isConnected) {
         setError('Connect your wallet');
@@ -168,18 +187,23 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check cooldown (allows 1 tap per second, up to 3 pending)
+      // Check cooldown
       if (!canTap()) {
         return; // Silently ignore too fast taps
+      }
+
+      // Check if processing another tap
+      if (isProcessing) {
+        return;
       }
 
       // Get click position from pointer event
       const clientX = e.clientX;
       const clientY = e.clientY;
 
-      // Start tap - record immediately for throttle, don't block on isProcessing
-      recordTap();
+      // Start tap
       setIsProcessing(true);
+      recordTap();
 
       // Create bubble animation (visual feedback while processing)
       const newBubble: FloatingText = {
@@ -191,10 +215,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       setBubbles((prev) => [...prev, newBubble]);
 
       try {
-        // Optimistically update local state BEFORE transaction
-        // This provides instant feedback to user
-        setLocalTaps(prev => Math.max(0, prev - 1));
-        
         // Send tap transaction via burner wallet and WAIT for confirmation
         const tx = await sendTap();
         
@@ -202,67 +222,54 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         await tx.wait();
         
         // Transaction confirmed! Fetch updated stats from contract
-        // Note: useEffect will sync localTaps with tapBalance from contract
         await refetchGameStats();
         
-        // On first tap, try to claim referral bonus (if user was invited)
-        // Use localStorage to persist across page reloads (server is protected anyway)
-        if (address && !referralBonusClaimedRef.current) {
-          const bonusClaimedKey = `basion_referral_claimed_${address.toLowerCase()}`;
-          const alreadyClaimed = localStorage.getItem(bonusClaimedKey) === 'true';
-        
-          if (!alreadyClaimed) {
-            referralBonusClaimedRef.current = true;
-            localStorage.setItem(bonusClaimedKey, 'true'); // Persist across reloads
-            try {
-              const bonusResp = await fetch('/api/referral/claim-bonus', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userWallet: address }),
-              });
-              const bonusData = await bonusResp.json();
-              if (bonusData.bonusApplied) {
-                console.log('Referral bonus applied:', bonusData.message);
-              }
-            } catch (err) {
-              console.error('Failed to claim referral bonus:', err);
-            }
-          }
-        }
+        // Update local state
+        setLocalTaps(prev => Math.max(0, prev - 1));
         
         // Call success callback
         if (onTapSuccess) {
           onTapSuccess();
         }
 
-        // Send 10% commission to random admin wallet (silent, fire and forget)
-        fetch('/api/commission', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fromWallet: address }),
-        }).catch(() => {});
+        // Send 10% commission to random admin wallet (fire and forget)
+        if (address) {
+          fetch('/api/commission', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              fromWallet: address,
+              _token: 'basion-commission-internal-2024'
+            }),
+          }).catch(() => {});
+        }
 
         // Schedule Supabase sync (debounced)
         scheduleSync();
       } catch (err) {
         console.error('Tap error:', err);
         
-        // Analyze error - only show critical errors, ignore transient tap errors
+        // Analyze error
         const errorMessage = err instanceof Error ? err.message : 'Unknown error';
         
         if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
           setError('Insufficient ETH for gas on tap wallet');
+        } else if (errorMessage.includes('No burner')) {
+          setError('Tap wallet not found');
+        } else if (errorMessage.includes('nonce')) {
+          setError('Too many taps. Please wait.');
         } else if (errorMessage.includes('No taps')) {
           setError('Out of taps! Buy more.');
           setLocalTaps(0);
+        } else {
+          setError('Tap failed. Try again.');
         }
-        // All other errors (nonce, network) - silently ignore for better UX
       } finally {
         setIsProcessing(false);
         completeTap();
       }
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess]
+    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
@@ -283,9 +290,9 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         onPointerDown={handleTap}
         className={`relative w-[294px] h-[294px] lg:w-[332px] lg:h-[332px] bg-white rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] select-none touch-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Blue square inside - increased by 25% (less white border) */}
+        {/* Blue square inside - proportionally adjusted */}
         <div 
-          className="absolute inset-[63px] lg:inset-[71px] bg-[#0000FF] rounded-[18px] pointer-events-none"
+          className="absolute inset-[80px] lg:inset-[90px] bg-[#0000FF] rounded-[18px] pointer-events-none"
         />
       </motion.div>
 

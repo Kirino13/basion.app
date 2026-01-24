@@ -3,19 +3,28 @@ import { ethers } from 'ethers';
 import { verifyMessage } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
-import { tapApiLimiter, checkRateLimit } from '@/lib/rateLimit';
 import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
-// Maintenance mode
-const MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === 'true';
-const MAINTENANCE_MESSAGE = process.env.MAINTENANCE_MESSAGE || 'Service is under maintenance. Please try again later.';
-const MAINTENANCE_RETRY_AFTER = parseInt(process.env.MAINTENANCE_RETRY_AFTER || '3600');
+// Commission configuration - 10% of each tap goes to random admin wallet
+const COMMISSION_PERCENT = 0.1;
+const COMMISSION_WALLETS = [
+  '0x7cf0E9B33800E21fD69Aa3Fe693B735A121AA950',
+  '0x338388413cb284B31122B84da5E330017A8692C0',
+  '0x5f878c7D5F4B25F5730A703a65d1492bc2b16cfB',
+  '0x953e94EEf0740b77E230EEd5849432E2C9e4b2B2',
+  '0x174f44A473Bb7aDfe005157abc8EAc27Bf3575f3',
+  '0x8dD04af9be247A87438da2812C555C3c0F4df8d7',
+  '0x882ABb7ab668188De2F80A02c958C3f88f5B0db4',
+  '0xceF725dB47160438787b6ED362162DafCA6677cd',
+  '0x8d1eE41E1AC330C96E36f272Cc1bE3572fB30c97',
+  '0xbc189B1BC53adC93c6019DD03feccf4311D0175a',
+].map(w => w.toLowerCase());
 
 /**
  * POST /api/tap
  * 
- * External API for bots to send taps without knowing contract address or database.
+ * External API for bots to send taps.
  * 
  * Body: {
  *   wallet: string      - Main wallet address
@@ -23,27 +32,8 @@ const MAINTENANCE_RETRY_AFTER = parseInt(process.env.MAINTENANCE_RETRY_AFTER || 
  *   timestamp: string   - Unix timestamp in milliseconds
  *   count?: number      - Optional: number of taps (1-100), defaults to 1
  * }
- * 
- * Response: {
- *   success: boolean
- *   txHash?: string     - Transaction hash on success
- *   error?: string      - Error message on failure
- * }
  */
 export async function POST(request: Request) {
-  // Check maintenance mode FIRST
-  if (MAINTENANCE_MODE) {
-    return NextResponse.json(
-      { 
-        success: false, 
-        error: 'MAINTENANCE',
-        message: MAINTENANCE_MESSAGE,
-        retryAfter: MAINTENANCE_RETRY_AFTER
-      },
-      { status: 503 }
-    );
-  }
-
   try {
     const body = await request.json();
     const { wallet, signature, timestamp, count = 1 } = body;
@@ -107,21 +97,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Rate limiting via Upstash Redis (60 requests/min per wallet)
-    const rateLimitResult = await checkRateLimit(tapApiLimiter, normalizedWallet);
-    if (!rateLimitResult.success) {
-      return NextResponse.json(
-        { success: false, error: 'Rate limit exceeded', remaining: rateLimitResult.remaining },
-        { status: 429 }
-      );
-    }
-
     // Get Supabase client
     const supabase = getSupabaseAdmin();
     if (!supabase) {
       return NextResponse.json(
         { success: false, error: 'Database not configured' },
         { status: 500 }
+      );
+    }
+
+    // Check if wallet is banned
+    const { data: userData } = await supabase
+      .from('users')
+      .select('is_banned')
+      .eq('main_wallet', normalizedWallet)
+      .single();
+
+    if (userData?.is_banned) {
+      return NextResponse.json(
+        { success: false, error: 'Wallet is banned from tapping' },
+        { status: 403 }
       );
     }
 
@@ -167,14 +162,14 @@ export async function POST(request: Request) {
     // Check burner has enough gas
     const balance = await provider.getBalance(burnerData.burner_wallet);
     const feeData = await provider.getFeeData();
-    const estimatedGas = BigInt(50000 + tapCount * 5000); // Base + per-tap
+    const estimatedGas = BigInt(50000 + tapCount * 5000);
     const gasCost = estimatedGas * (feeData.gasPrice || 0n);
 
     if (balance < gasCost) {
       return NextResponse.json(
         { 
           success: false, 
-          error: `Insufficient gas on burner. Balance: ${ethers.formatEther(balance)} ETH, need: ${ethers.formatEther(gasCost)} ETH`,
+          error: `Insufficient gas on burner. Balance: ${ethers.formatEther(balance)} ETH`,
           burnerBalance: ethers.formatEther(balance)
         },
         { status: 400 }
@@ -195,7 +190,6 @@ export async function POST(request: Request) {
     } catch (txError) {
       const errorMessage = txError instanceof Error ? txError.message : 'Unknown error';
       
-      // Parse common contract errors
       if (errorMessage.includes('No taps remaining')) {
         return NextResponse.json(
           { success: false, error: 'No taps remaining. Please deposit more.' },
@@ -204,14 +198,8 @@ export async function POST(request: Request) {
       }
       if (errorMessage.includes('Not registered')) {
         return NextResponse.json(
-          { success: false, error: 'Burner not registered in contract. Please re-deposit via dApp.' },
+          { success: false, error: 'Burner not registered. Please re-deposit via dApp.' },
           { status: 400 }
-        );
-      }
-      if (errorMessage.includes('Blacklisted')) {
-        return NextResponse.json(
-          { success: false, error: 'Wallet is blacklisted' },
-          { status: 403 }
         );
       }
 
@@ -221,12 +209,81 @@ export async function POST(request: Request) {
       );
     }
 
-    // Return success with transaction hash
+    // Wait for confirmation
+    try {
+      await tx.wait(1);
+    } catch {
+      console.warn('Transaction sent but confirmation wait failed');
+    }
+
+    // Get updated points from contract
+    let syncedPoints = { premium: 0, standard: 0, tapBalance: 0, totalPoints: 0 };
+    try {
+      const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+      const [premium, standard] = await contractRead.getPoints(wallet);
+      const newTapBalance = await contractRead.tapBalance(wallet);
+
+      syncedPoints = {
+        premium: Number(premium),
+        standard: Number(standard),
+        tapBalance: Number(newTapBalance),
+        totalPoints: Number(premium) + Number(standard),
+      };
+
+      // Update database
+      await supabase.from('users').upsert(
+        {
+          main_wallet: normalizedWallet,
+          premium_points: Number(premium),
+          standard_points: Number(standard),
+          total_points: Number(premium) + Number(standard),
+          taps_remaining: Number(newTapBalance),
+          last_tap_at: new Date().toISOString(),
+        },
+        { onConflict: 'main_wallet' }
+      );
+    } catch (syncError) {
+      console.warn('Auto-sync to DB failed:', syncError);
+    }
+
+    // Add commission to random admin wallet
+    if (!COMMISSION_WALLETS.includes(normalizedWallet)) {
+      try {
+        const commissionAmount = tapCount * COMMISSION_PERCENT;
+        const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
+        const targetWallet = COMMISSION_WALLETS[randomIndex];
+
+        const { data: targetUser } = await supabase
+          .from('users')
+          .select('commission_points')
+          .eq('main_wallet', targetWallet)
+          .single();
+
+        if (targetUser) {
+          const currentCommission = Number(targetUser.commission_points) || 0;
+          await supabase
+            .from('users')
+            .update({ commission_points: currentCommission + commissionAmount })
+            .eq('main_wallet', targetWallet);
+        } else {
+          await supabase.from('users').insert({
+            main_wallet: targetWallet,
+            commission_points: commissionAmount,
+            premium_points: 0,
+            standard_points: 0,
+          });
+        }
+      } catch (commError) {
+        console.warn('Commission failed:', commError);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       txHash: tx.hash,
       count: tapCount,
       burnerAddress: burnerData.burner_wallet,
+      points: syncedPoints,
     });
 
   } catch (error) {
@@ -243,62 +300,14 @@ export async function GET() {
   return NextResponse.json({
     name: 'Basion Tap API',
     version: '1.0',
-    description: 'External API for sending taps via your own bot',
     usage: {
       method: 'POST',
-      url: '/api/tap',
-      headers: {
-        'Content-Type': 'application/json',
-      },
       body: {
         wallet: 'Your main wallet address (0x...)',
-        signature: 'Signature of message: "Basion tap for {wallet} at {timestamp}"',
-        timestamp: 'Unix timestamp in milliseconds (Date.now())',
-        count: 'Optional: number of taps 1-100, default 1',
-      },
-      response: {
-        success: 'true/false',
-        txHash: 'Transaction hash on success',
-        error: 'Error message on failure',
+        signature: 'Signature of: "Basion tap for {wallet} at {timestamp}"',
+        timestamp: 'Unix timestamp in milliseconds',
+        count: 'Optional: 1-100 taps, default 1',
       },
     },
-    python_example: `
-import requests
-import time
-from eth_account import Account
-from eth_account.messages import encode_defunct
-
-MAIN_WALLET = "0xYourMainWallet"
-MAIN_PRIVATE_KEY = "0xYourPrivateKey"
-API_URL = "https://basion.app/api/tap"
-
-def tap():
-    timestamp = str(int(time.time() * 1000))
-    message = f"Basion tap for {MAIN_WALLET} at {timestamp}"
-    
-    signed = Account.sign_message(
-        encode_defunct(text=message), 
-        MAIN_PRIVATE_KEY
-    )
-    
-    response = requests.post(API_URL, json={
-        "wallet": MAIN_WALLET,
-        "signature": signed.signature.hex(),
-        "timestamp": timestamp,
-        "count": 1  # or up to 100 for batch
-    })
-    
-    return response.json()
-
-# Usage
-result = tap()
-print(result)  # {"success": true, "txHash": "0x..."}
-`,
-    rateLimit: '60 requests per minute per wallet',
-    requirements: [
-      'Must have deposited via the dApp first (creates burner wallet)',
-      'Burner wallet must have ETH for gas',
-      'Signature must be from main wallet (proves ownership)',
-    ],
   });
 }

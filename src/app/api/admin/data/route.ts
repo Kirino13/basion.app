@@ -59,10 +59,10 @@ export async function GET(request: Request) {
       });
     }
 
-    // Fetch users (including boost data and referral data)
+    // Fetch users (including boost data, referral data, ban status, deposits)
     const { data: users, error: usersError } = await supabase
       .from('users')
-      .select('main_wallet, burner_wallet, total_points, premium_points, standard_points, taps_remaining, boost_percent, used_codes, referred_by, referral_count, referral_bonus_claimed, created_at')
+      .select('main_wallet, burner_wallet, total_points, premium_points, standard_points, taps_remaining, boost_percent, used_codes, referred_by, referral_count, referral_bonus_claimed, is_banned, banned_at, total_deposit_usd, deposit_count, commission_points, created_at')
       .order('total_points', { ascending: false });
 
     if (usersError) {

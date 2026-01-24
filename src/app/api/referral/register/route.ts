@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { referralRegisterLimiter, checkRateLimit } from '@/lib/rateLimit';
 
 // POST /api/referral/register
 // Called when user makes first deposit with a referrer
@@ -12,12 +11,6 @@ export async function POST(request: Request) {
 
     if (!userWallet) {
       return NextResponse.json({ error: 'Missing userWallet' }, { status: 400 });
-    }
-
-    // Rate limiting via Upstash Redis (3 requests/10s per wallet)
-    const rateLimitResult = await checkRateLimit(referralRegisterLimiter, userWallet.toLowerCase());
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ error: 'Rate limit exceeded' }, { status: 429 });
     }
 
     // Validate wallet address format
@@ -33,19 +26,19 @@ export async function POST(request: Request) {
     const normalizedUser = userWallet.toLowerCase();
     const normalizedReferrer = referrerWallet?.toLowerCase();
 
-    // Check if user already has a referrer set
+    // Check if user already has a referrer
     const { data: existingUser } = await supabase
       .from('users')
       .select('referred_by')
       .eq('main_wallet', normalizedUser)
       .single();
 
-    // If user already has a referrer, don't overwrite
+    // Don't overwrite existing referrer
     if (existingUser?.referred_by) {
       return NextResponse.json({ success: true, message: 'Referrer already set' });
     }
 
-    // Validate referrer is not the same as user and is a valid address
+    // Validate referrer
     const isValidReferrer = normalizedReferrer && 
       normalizedReferrer !== normalizedUser &&
       normalizedReferrer !== '0x0000000000000000000000000000000000000000' &&
@@ -56,7 +49,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'No valid referrer' });
     }
 
-    // Save referrer for user (bonus will be applied on first tap)
+    // Save referrer
     const { error } = await supabase
       .from('users')
       .upsert({

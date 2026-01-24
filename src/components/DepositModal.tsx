@@ -64,22 +64,6 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
     return '0x0000000000000000000000000000000000000000';
   };
 
-  // Proceed to deposit step (must be defined before useEffects that use it)
-  const proceedToDeposit = useCallback(() => {
-    setStep('depositing');
-    resetWrite();
-    
-    const referrer = getReferrer();
-    
-    writeContract({
-      address: CONTRACT_ADDRESS,
-      abi: BASION_ABI,
-      functionName: 'deposit',
-      args: [BigInt(selectedPackage), referrer],
-      value: parseEther(ethAmount),
-    });
-  }, [selectedPackage, ethAmount, writeContract, resetWrite]);
-
   // Load ETH price on open
   useEffect(() => {
     if (isOpen) {
@@ -116,42 +100,45 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       } else if (step === 'depositing') {
         // Deposit confirmed!
         setStep('done');
+        refetchGameStats();
         
-        // Aggressive refetch to ensure UI updates immediately
-        // Retry 5 times with 1 second delay to wait for blockchain state
-        const refreshData = async () => {
-          await refetchGameStats(5, 1000);
-          
-          // Register referral relationship in database
-          const referrer = getReferrer();
-          if (address && referrer !== '0x0000000000000000000000000000000000000000') {
-            try {
-              await fetch('/api/referral/register', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userWallet: address,
-                  referrerWallet: referrer,
-                }),
-              });
-            } catch (err) {
-              console.error('Failed to register referral:', err);
-            }
-          }
-          
-          // Notify parent component about successful deposit
-          if (onDepositSuccess) {
-            onDepositSuccess();
-          }
-        };
-        refreshData();
+        // Register referral if exists
+        const referrer = getReferrer();
+        if (address && referrer && referrer !== '0x0000000000000000000000000000000000000000') {
+          fetch('/api/referral/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              userWallet: address, 
+              referrerWallet: referrer 
+            }),
+          }).catch(() => {});
+        }
         
+        // Track deposit in USD
+        if (address) {
+          const usdAmount = packages[selectedPackage].usd;
+          fetch('/api/sync-deposit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              wallet: address, 
+              usdAmount 
+            }),
+          }).catch(() => {});
+        }
+        
+        // Notify parent component about successful deposit
+        if (onDepositSuccess) {
+          onDepositSuccess();
+        }
         setTimeout(() => {
           onClose();
-        }, 2500);
+        }, 2000);
       }
     }
-  }, [txConfirmed, step, proceedToDeposit, refetchGameStats, onClose, onDepositSuccess, address]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [txConfirmed, step]); // proceedToDeposit/refetchGameStats/onClose are stable
 
   // Handle transaction error
   useEffect(() => {
@@ -168,7 +155,22 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       }
       setStep('error');
     }
-  }, [txFailed, writeError, proceedToDeposit]);
+  }, [txFailed, writeError]);
+
+  const proceedToDeposit = useCallback(() => {
+    setStep('depositing');
+    resetWrite();
+    
+    const referrer = getReferrer();
+    
+    writeContract({
+      address: CONTRACT_ADDRESS,
+      abi: BASION_ABI,
+      functionName: 'deposit',
+      args: [BigInt(selectedPackage), referrer],
+      value: parseEther(ethAmount),
+    });
+  }, [selectedPackage, ethAmount, writeContract, resetWrite]);
 
   const handleDeposit = async () => {
     if (!address) {

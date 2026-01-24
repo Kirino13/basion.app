@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { boostRedeemLimiter, checkRateLimit } from '@/lib/rateLimit';
 
-// Boost codes from environment (server-side only, NOT NEXT_PUBLIC_)
+// Boost codes from environment
 // Format: CODE1:AMOUNT,CODE2:AMOUNT (e.g., "BONUS20:20,VIP50:50")
 const BOOST_CODES_RAW = process.env.BOOST_CODES || 'MAVRINO40413:20';
 const BOOST_CODES = new Map<string, number>(
@@ -14,7 +13,6 @@ const BOOST_CODES = new Map<string, number>(
 
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
-// Applies boost if code is valid (max 100%)
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -27,13 +25,7 @@ export async function POST(request: Request) {
     const normalizedAddress = address.toLowerCase();
     const normalizedCode = code.trim().toUpperCase();
 
-    // Rate limiting via Upstash Redis (10 attempts/min per wallet)
-    const rateLimitResult = await checkRateLimit(boostRedeemLimiter, normalizedAddress);
-    if (!rateLimitResult.success) {
-      return NextResponse.json({ ok: false, error: 'RATE_LIMIT' }, { status: 429 });
-    }
-
-    // Validate code from environment-configured codes
+    // Validate code
     const boostAmount = BOOST_CODES.get(normalizedCode);
     if (!boostAmount) {
       return NextResponse.json({ ok: false, error: 'INVALID_CODE' });
@@ -46,29 +38,25 @@ export async function POST(request: Request) {
     }
 
     // Get current user data
-    const { data: userData, error: fetchError } = await supabase
+    const { data: userData } = await supabase
       .from('users')
       .select('boost_percent, used_codes')
       .eq('main_wallet', normalizedAddress)
       .single();
 
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('Fetch user error:', fetchError);
-    }
-
     const currentBoost = userData?.boost_percent || 0;
     const usedCodes: string[] = userData?.used_codes || [];
 
-    // Check if code already used by this user (from database)
+    // Check if code already used
     if (usedCodes.includes(normalizedCode)) {
       return NextResponse.json({ ok: false, error: 'CODE_ALREADY_USED' });
     }
 
-    // Calculate new boost (add boost amount, max 100%)
+    // Calculate new boost (max 100%)
     const newBoost = Math.min(currentBoost + boostAmount, 100);
     const newUsedCodes = [...usedCodes, normalizedCode];
 
-    // Update user boost and used codes in database
+    // Update user
     const { error: updateError } = await supabase
       .from('users')
       .upsert({
