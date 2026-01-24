@@ -5,8 +5,8 @@ import { syncUserLimiter, checkRateLimit } from '@/lib/rateLimit';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // premiumPoints and standardPoints are ALREADY CALCULATED POINTS from contract
-    // Contract already applies multipliers, so we just store them directly
+    // premiumPoints and standardPoints are RAW points from contract
+    // boost_percent from DB is applied to NEW points earned since last sync
     const { mainWallet, premiumPoints, standardPoints, tapBalance } = body;
 
     if (!mainWallet) {
@@ -30,25 +30,49 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Build update object - directly sync from contract
-    // Contract already handles all multipliers/boosts, so we just store the values
+    // Get existing user data
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('total_taps, premium_points, standard_points, taps_remaining, boost_percent')
+      .eq('main_wallet', mainWallet.toLowerCase())
+      .single();
+
+    // Build update object
     const updateData: Record<string, unknown> = {
       main_wallet: mainWallet.toLowerCase(),
       last_tap_at: new Date().toISOString(),
     };
 
-    // Premium points from contract (already includes contract-side multipliers)
+    // Get user's boost multiplier from DB (from promo codes/referrals)
+    const boostPercent = existingUser?.boost_percent || 0;
+    const boostMultiplier = 1 + boostPercent / 100;
+
+    // Calculate boosted premium points
     if (typeof premiumPoints === 'number' && premiumPoints >= 0) {
-      updateData.premium_points = premiumPoints;
-      updateData.total_taps = premiumPoints; // For tracking, same as premium for now
+      // total_taps stores RAW value from contract (for delta calculation)
+      const oldTotalTaps = existingUser?.total_taps || 0;
+      const newPoints = Math.max(0, premiumPoints - oldTotalTaps);
+      
+      if (newPoints > 0) {
+        // Apply DB boost to newly earned points only
+        const boostedNewPoints = newPoints * boostMultiplier;
+        const currentPremiumPoints = existingUser?.premium_points || 0;
+        updateData.premium_points = currentPremiumPoints + boostedNewPoints;
+      } else if (!existingUser) {
+        // First sync - apply boost to all
+        updateData.premium_points = premiumPoints * boostMultiplier;
+      }
+      
+      // Always update total_taps to track raw contract value
+      updateData.total_taps = premiumPoints;
     }
 
-    // Standard points from contract
+    // Standard points - no boost applied
     if (typeof standardPoints === 'number' && standardPoints >= 0) {
       updateData.standard_points = standardPoints;
     }
     
-    // Tap balance (remaining taps)
+    // Tap balance
     if (typeof tapBalance === 'number' && tapBalance >= 0) {
       updateData.taps_remaining = tapBalance;
     }
