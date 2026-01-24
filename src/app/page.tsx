@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Copy, Check, CircleDollarSign, Zap, Gift, Loader2 } from 'lucide-react';
+import { Copy, Check, CircleDollarSign, Zap, Rocket, Send } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
 import { useBasionContract, useReferral } from '@/hooks';
@@ -14,31 +14,37 @@ function HomeContent() {
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
   
-  // Boost code state
+  // Boost states
+  const [boostPercent, setBoostPercent] = useState<number | null>(null);
   const [boostCode, setBoostCode] = useState('');
-  const [boostPercent, setBoostPercent] = useState(0);
-  const [isRedeemingBoost, setIsRedeemingBoost] = useState(false);
+  const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [boostMessage, setBoostMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Fetch boost on mount
+  
+  // Fetch boost percent when address changes
   useEffect(() => {
     if (address) {
       fetch(`/api/boost?address=${address}`)
         .then(res => res.json())
-        .then(data => {
-          if (data.boostPercent) {
-            setBoostPercent(data.boostPercent);
-          }
-        })
-        .catch(() => {});
+        .then(data => setBoostPercent(data.boostPercent ?? 0))
+        .catch(() => setBoostPercent(0));
+    } else {
+      setBoostPercent(null);
     }
   }, [address]);
 
-  // Redeem boost code
-  const handleRedeemBoost = async () => {
-    if (!address || !boostCode.trim()) return;
+  // Clear boost message after 3 seconds
+  useEffect(() => {
+    if (boostMessage) {
+      const timer = setTimeout(() => setBoostMessage(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [boostMessage]);
+
+  // Apply boost code
+  const handleApplyCode = async () => {
+    if (!address || !boostCode.trim() || isApplyingCode) return;
     
-    setIsRedeemingBoost(true);
+    setIsApplyingCode(true);
     setBoostMessage(null);
     
     try {
@@ -53,30 +59,29 @@ function HomeContent() {
       if (data.ok) {
         setBoostPercent(data.boostPercent);
         setBoostCode('');
-        setBoostMessage({ type: 'success', text: `+${data.addedBoost}% boost added!` });
+        setBoostMessage({ type: 'success', text: `+${data.addedBoost}% applied!` });
       } else {
-        const errorMap: Record<string, string> = {
-          'INVALID_CODE': 'Invalid code',
-          'CODE_ALREADY_USED': 'Code already used',
-        };
-        setBoostMessage({ type: 'error', text: errorMap[data.error] || 'Failed to redeem' });
+        const errorText = data.error === 'INVALID_CODE' ? 'Invalid code' 
+          : data.error === 'CODE_ALREADY_USED' ? 'Code already used'
+          : 'Failed to apply';
+        setBoostMessage({ type: 'error', text: errorText });
       }
     } catch {
       setBoostMessage({ type: 'error', text: 'Network error' });
     } finally {
-      setIsRedeemingBoost(false);
-      setTimeout(() => setBoostMessage(null), 3000);
+      setIsApplyingCode(false);
     }
   };
-  
+
   // Refetch stats when tap succeeds (blockchain confirmed)
   const handleTapSuccess = useCallback(() => {
     refetchGameStats();
   }, [refetchGameStats]);
 
   // Called when deposit is successful
-  const handleDepositSuccess = useCallback(() => {
-    refetchGameStats();
+  const handleDepositSuccess = useCallback(async () => {
+    // Refetch with retries to ensure UI updates
+    await refetchGameStats(3, 1000);
   }, [refetchGameStats]);
 
   const handleInvite = async () => {
@@ -118,7 +123,8 @@ function HomeContent() {
             )}
 
             {/* Bottom Action Area - buttons increased by 30% */}
-            <div className="w-full flex flex-col px-2 mt-16">
+            <div className="w-full flex flex-col px-2 mt-16 gap-3">
+              {/* Row 1: Deposit / Taps / Invite */}
               <div className="w-full flex flex-row items-center justify-center gap-3">
                 {/* Deposit Button */}
                 <button
@@ -174,55 +180,59 @@ function HomeContent() {
                 </button>
               </div>
 
-              {/* Boost Code Input */}
-              {isConnected && (
-                <div className="mt-4 w-full">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={boostCode}
-                      onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
-                      placeholder="Enter boost code"
-                      className="flex-1 bg-white/80 px-4 py-3 rounded-xl text-slate-900 placeholder:text-slate-400 font-medium shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      onClick={handleRedeemBoost}
-                      disabled={!boostCode.trim() || isRedeemingBoost}
-                      className="bg-purple-500 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-3 rounded-xl text-white font-bold shadow-lg transition-all flex items-center gap-2"
-                    >
-                      {isRedeemingBoost ? (
-                        <Loader2 size={20} className="animate-spin" />
-                      ) : (
-                        <Gift size={20} />
-                      )}
-                      Redeem
-                    </button>
-                  </div>
-                  
-                  {/* Boost status */}
-                  <div className="mt-2 flex items-center justify-between">
-                    {boostPercent > 0 && (
-                      <span className="text-sm font-medium text-purple-600 bg-purple-100 px-3 py-1 rounded-full">
-                        Boost: +{boostPercent}%
-                      </span>
+              {/* Row 2: Boost Button / Code Input */}
+              <div className="w-full flex flex-row items-center justify-center gap-3">
+                {/* Boost Button */}
+                <button
+                  className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all flex items-center justify-center gap-2 cursor-default"
+                  title="Your boost is applied to points"
+                >
+                  <Rocket size={22} className="text-blue-600" />
+                  <span>
+                    Boost {boostPercent === null ? '--' : boostPercent}%
+                  </span>
+                </button>
+
+                {/* Code Input + Apply */}
+                <div className="flex-1 bg-white py-2 px-3 rounded-2xl shadow-xl shadow-blue-900/10 flex items-center gap-2">
+                  <input
+                    type="text"
+                    placeholder="CODE"
+                    value={boostCode}
+                    onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
+                    disabled={!isConnected || isApplyingCode}
+                    className="flex-1 bg-transparent text-slate-900 font-bold text-base placeholder:text-slate-400 outline-none min-w-0 py-2"
+                  />
+                  <button
+                    onClick={handleApplyCode}
+                    disabled={!isConnected || !boostCode.trim() || isApplyingCode}
+                    className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed p-2 rounded-xl transition-all active:scale-95"
+                  >
+                    {isApplyingCode ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Send size={20} className="text-white" />
                     )}
-                    <AnimatePresence>
-                      {boostMessage && (
-                        <motion.span
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          className={`text-sm font-medium ${
-                            boostMessage.type === 'success' ? 'text-green-600' : 'text-red-500'
-                          }`}
-                        >
-                          {boostMessage.text}
-                        </motion.span>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                  </button>
                 </div>
-              )}
+              </div>
+
+              {/* Boost Message */}
+              <AnimatePresence>
+                {boostMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className={`text-center text-sm font-medium ${
+                      boostMessage.type === 'success' ? 'text-green-600' : 'text-red-500'
+                    }`}
+                  >
+                    {boostMessage.text}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 

@@ -22,7 +22,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const fetchLeaderboard = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/leaderboard?limit=10');
+      const res = await fetch('/api/leaderboard?limit=5');
       
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
