@@ -8,9 +8,15 @@ import { useSearchParams } from 'next/navigation';
 import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard, MaintenancePage } from '@/components';
 import { useBasionContract, useReferral } from '@/hooks';
 
-// Check for maintenance mode
+// Check for maintenance mode - v2
 const MAINTENANCE_MODE = process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
 const ADMIN_BYPASS_KEY = process.env.NEXT_PUBLIC_ADMIN_KEY || 'basion-admin-2024';
+
+// Debug: log maintenance mode status (remove after testing)
+if (typeof window !== 'undefined') {
+  console.log('[Basion] Maintenance mode:', MAINTENANCE_MODE);
+  console.log('[Basion] Env value:', process.env.NEXT_PUBLIC_MAINTENANCE_MODE);
+}
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
