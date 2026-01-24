@@ -323,8 +323,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         />
       </motion.div>
 
-      {/* Only show deposit-related messages */}
-      {error && (error.includes('deposit') || error.includes('taps')) && (
+      {/* Only show: connect wallet, banned, deposit messages */}
+      {error && (error.includes('deposit') || error.includes('taps') || error.includes('Connect') || error.includes('banned')) && (
         <motion.p 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
