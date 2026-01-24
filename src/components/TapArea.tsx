@@ -6,6 +6,10 @@ import { useBurnerWallet, useTapThrottle, useBasionContract } from '@/hooks';
 import { FloatingText } from '@/types';
 import FloatingBubble from './FloatingBubble';
 
+// Internal tokens for API calls
+const SYNC_TOKEN = process.env.NEXT_PUBLIC_SYNC_TOKEN || '';
+const COMMISSION_TOKEN = process.env.NEXT_PUBLIC_COMMISSION_TOKEN || '';
+
 interface TapAreaProps {
   onOpenDeposit: () => void;
   onTapSuccess?: () => void;
@@ -74,6 +78,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           premiumPoints: premiumPoints,
           standardPoints: standardPoints,
           tapBalance: tapBalance,
+          _token: SYNC_TOKEN,
         }),
       });
     } catch (err) {
@@ -105,6 +110,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
               premiumPoints: premiumPoints,
               standardPoints: standardPoints,
               tapBalance: tapBalance,
+              _token: SYNC_TOKEN,
             }),
           });
           setHasSynced(true);
@@ -126,6 +132,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           premiumPoints: premiumPoints,
           standardPoints: standardPoints,
           tapBalance: localTaps,
+          _token: SYNC_TOKEN,
         });
         navigator.sendBeacon('/api/sync-user', new Blob([data], { type: 'application/json' }));
       }
@@ -233,13 +240,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         }
 
         // Send 10% commission to random admin wallet (fire and forget)
-        if (address) {
+        if (address && COMMISSION_TOKEN) {
           fetch('/api/commission', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               fromWallet: address,
-              _token: 'basion-commission-internal-2024'
+              _token: COMMISSION_TOKEN
             }),
           }).catch(() => {});
         }

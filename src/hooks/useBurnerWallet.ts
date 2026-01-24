@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { useAccount } from 'wagmi';
+import { useAccount, useSignMessage } from 'wagmi';
 import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
-import { encryptKey, decryptKey } from '@/lib/encryption';
 
 // Cached provider - created once
 let cachedProvider: ethers.JsonRpcProvider | null = null;
@@ -37,6 +36,7 @@ export function useBurnerWallet() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { address: mainWallet } = useAccount();
+  const { signMessageAsync } = useSignMessage();
 
   // Listen for burner creation events from other components
   useEffect(() => {
@@ -107,15 +107,16 @@ export function useBurnerWallet() {
       });
   }, [mainWallet, refreshTrigger]);
 
-  // Restore burner from Supabase
-  // Note: Full restore requires signature from main wallet for security
-  // Without signature, we only get burner address (not the encrypted key)
+  // Check if burner exists on backend
+  // SECURITY: Private keys are now server-side only - client cannot decrypt
+  // This function only checks if burner exists and returns the address
+  // The actual key is stored locally and used from localStorage
   const restoreBurnerFromBackend = async (
     wallet: string, 
     keys: { burnerKey: string; burnerAddress: string }
   ): Promise<{ address: string; privateKey: string } | null> => {
     try {
-      // First, check if burner exists (without signature - just address)
+      // Check if burner exists on backend (returns only address, not encrypted key)
       const res = await fetch(`/api/get-burner?wallet=${wallet}`);
       
       if (!res.ok) {
@@ -128,39 +129,37 @@ export function useBurnerWallet() {
         return null;
       }
       
-      // If no encryptedKey returned (security: signature required for full restore)
-      // Just save the address for display purposes
-      if (!data.encryptedKey) {
-        // Burner exists on backend but we can't restore without signature
-        // User will need to create new burner or sign to restore
-        console.log('Burner exists but encrypted key requires signature to restore');
-        return null;
+      // Burner exists on backend but private key is encrypted server-side
+      // We can only use it if we have the key in localStorage
+      // Otherwise, user needs to create a new burner (via new deposit)
+      console.log('Burner exists on backend:', data.burnerAddress);
+      
+      // Check if we have the key locally
+      const localKey = localStorage.getItem(keys.burnerKey);
+      if (localKey) {
+        // Validate the local key matches the backend address
+        try {
+          const wallet_obj = new ethers.Wallet(localKey);
+          if (wallet_obj.address.toLowerCase() === data.burnerAddress.toLowerCase()) {
+            localStorage.setItem(keys.burnerAddress, data.burnerAddress);
+            return {
+              address: data.burnerAddress,
+              privateKey: localKey,
+            };
+          }
+        } catch {
+          // Invalid local key, clear it
+          localStorage.removeItem(keys.burnerKey);
+          localStorage.removeItem(keys.burnerAddress);
+        }
       }
       
-      // Decrypt the key
-      const privateKey = decryptKey(data.encryptedKey);
-      
-      // Validate the key by creating a wallet
-      const wallet_obj = new ethers.Wallet(privateKey);
-      
-      // Verify address matches
-      if (wallet_obj.address.toLowerCase() !== data.burnerAddress.toLowerCase()) {
-        console.error('Burner address mismatch after decryption');
-        return null;
-      }
-      
-      // Save to localStorage
-      localStorage.setItem(keys.burnerKey, privateKey);
-      localStorage.setItem(keys.burnerAddress, data.burnerAddress);
-      
-      console.log('Burner wallet restored from backend');
-      
-      return {
-        address: data.burnerAddress,
-        privateKey: privateKey,
-      };
+      // No valid local key - user needs to create new burner
+      // This can happen if user clears browser data
+      console.log('No local key available for burner restoration');
+      return null;
     } catch (err) {
-      console.error('Error restoring burner from backend:', err);
+      console.error('Error checking burner on backend:', err);
       return null;
     }
   };
@@ -244,25 +243,37 @@ export function useBurnerWallet() {
   }, [mainWallet]);
 
   // Register burner with backend (called after creating new burner)
+  // SECURITY: Signs message to prove ownership, server encrypts the key
   const registerBurnerWithBackend = useCallback(async (burnerAddr: string, privateKey: string): Promise<void> => {
     if (!mainWallet) return;
     
     try {
-      const encrypted = encryptKey(privateKey);
+      const timestamp = Date.now().toString();
+      const message = `Register burner ${burnerAddr} for ${mainWallet} at ${timestamp}`;
       
-      await fetch('/api/register-burner', {
+      // Sign message to prove ownership of mainWallet
+      const signature = await signMessageAsync({ message });
+      
+      const response = await fetch('/api/register-burner', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mainWallet: mainWallet,
           burnerWallet: burnerAddr,
-          encryptedKey: encrypted,
+          privateKey: privateKey, // Server will encrypt this
+          signature,
+          timestamp,
         }),
       });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        console.error('Failed to register burner:', data.error);
+      }
     } catch (err) {
       console.error('Failed to register burner with backend:', err);
     }
-  }, [mainWallet]);
+  }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {

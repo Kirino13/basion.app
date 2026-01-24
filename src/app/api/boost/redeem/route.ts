@@ -1,6 +1,37 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
+// Rate limiting to prevent brute-force attacks
+const rateLimitMap = new Map<string, { count: number; resetAt: number; blockedUntil?: number }>();
+const RATE_LIMIT_MAX = 5; // Max attempts per window
+const RATE_LIMIT_WINDOW = 60000; // 1 minute window
+const BLOCK_DURATION = 300000; // 5 minute block after too many failures
+
+function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
+  const now = Date.now();
+  const record = rateLimitMap.get(ip);
+  
+  // Check if blocked
+  if (record?.blockedUntil && now < record.blockedUntil) {
+    return { allowed: false, retryAfter: Math.ceil((record.blockedUntil - now) / 1000) };
+  }
+  
+  // Reset window if expired
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW });
+    return { allowed: true };
+  }
+  
+  // Check if over limit
+  if (record.count >= RATE_LIMIT_MAX) {
+    record.blockedUntil = now + BLOCK_DURATION;
+    return { allowed: false, retryAfter: Math.ceil(BLOCK_DURATION / 1000) };
+  }
+  
+  record.count++;
+  return { allowed: true };
+}
+
 // Boost codes from environment
 // Format: CODE1:AMOUNT,CODE2:AMOUNT (e.g., "BONUS20:20,VIP50:50")
 const BOOST_CODES_RAW = process.env.BOOST_CODES || 'MAVRINO40413:20';
@@ -15,6 +46,17 @@ const BOOST_CODES = new Map<string, number>(
 // Body: { address: string, code: string }
 export async function POST(request: Request) {
   try {
+    // Rate limiting by IP
+    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const rateCheck = checkRateLimit(ip);
+    
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { ok: false, error: 'RATE_LIMIT_EXCEEDED', retryAfter: rateCheck.retryAfter },
+        { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } }
+      );
+    }
+    
     const body = await request.json();
     const { address, code } = body;
 

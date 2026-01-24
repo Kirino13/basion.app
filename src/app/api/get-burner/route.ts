@@ -22,9 +22,10 @@ export async function GET(request: Request) {
     }
 
     // Get burner for this wallet (most recent if multiple exist)
+    // SECURITY: Only return burner address, NOT the encrypted key
     const { data, error } = await supabase
       .from('burner_keys')
-      .select('burner_wallet, encrypted_key')
+      .select('burner_wallet')
       .eq('main_wallet', wallet.toLowerCase())
       .order('created_at', { ascending: false })
       .limit(1)
@@ -38,12 +39,11 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // Return encrypted key - only useful with ENCRYPTION_KEY
-    // Security: Even if someone intercepts this, they can't decrypt without the key
+    // SECURITY: Never return encrypted key to client
+    // The private key is stored locally and server uses encrypted version for operations
     return NextResponse.json({
       exists: true,
       burnerAddress: data.burner_wallet,
-      encryptedKey: data.encrypted_key,
     });
   } catch (error) {
     console.error('Get burner error:', error);

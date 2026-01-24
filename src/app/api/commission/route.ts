@@ -18,8 +18,8 @@ const COMMISSION_WALLETS = [
 // Commission rate: 10% of points per tap
 const COMMISSION_PERCENT = 0.1;
 
-// Internal token for verification
-const INTERNAL_TOKEN = 'basion-commission-internal-2024';
+// Internal token for verification - MUST be set in env
+const COMMISSION_TOKEN = process.env.COMMISSION_INTERNAL_TOKEN || process.env.NEXT_PUBLIC_COMMISSION_TOKEN;
 
 /**
  * POST /api/commission
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     }
 
     // Verify internal token
-    if (_token !== INTERNAL_TOKEN) {
+    if (!COMMISSION_TOKEN || _token !== COMMISSION_TOKEN) {
       return NextResponse.json({ ok: false, error: 'Invalid token' }, { status: 401 });
     }
 

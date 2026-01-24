@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
+// Internal token for sync endpoints - must be set in env
+const SYNC_TOKEN = process.env.SYNC_INTERNAL_TOKEN || process.env.NEXT_PUBLIC_SYNC_TOKEN;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { mainWallet, points, premiumPoints, standardPoints, tapBalance } = body;
+    const { mainWallet, points, premiumPoints, standardPoints, tapBalance, _token } = body;
+
+    // SECURITY: Require internal token
+    if (!SYNC_TOKEN || _token !== SYNC_TOKEN) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     if (!mainWallet) {
       return NextResponse.json({ error: 'Missing mainWallet' }, { status: 400 });

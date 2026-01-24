@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
-import { decryptKey } from '@/lib/encryption';
 import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Ban, DollarSign, Percent } from 'lucide-react';
 
 interface UserData {
@@ -274,8 +273,8 @@ export default function AdminPage() {
     }
   };
 
-  // Handle reveal/hide private key
-  const handleRevealKey = (burnerAddress: string, encryptedKey?: string) => {
+  // Handle reveal/hide private key (decrypts via server API)
+  const handleRevealKey = async (burnerAddress: string, encryptedKey?: string) => {
     if (!encryptedKey) {
       alert('Encrypted key not available');
       return;
@@ -288,12 +287,33 @@ export default function AdminPage() {
     }
 
     try {
-      const decrypted = decryptKey(encryptedKey);
-      if (!decrypted) {
-        alert('Failed to decrypt - key may be corrupted');
+      // Get fresh signature for API call
+      const signed = await signForAdmin();
+      if (!signed) {
+        alert('Failed to sign - please try again');
         return;
       }
-      setDecryptedKeys((prev) => ({ ...prev, [burnerAddress]: decrypted }));
+
+      // Call server API to decrypt
+      const response = await fetch('/api/admin/decrypt-key', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-address': address || '',
+          'x-admin-signature': signed.signature,
+          'x-admin-timestamp': signed.timestamp,
+        },
+        body: JSON.stringify({ encryptedKey }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        alert(data.error || 'Failed to decrypt key');
+        return;
+      }
+
+      setDecryptedKeys((prev) => ({ ...prev, [burnerAddress]: data.privateKey }));
       setRevealedKeys((prev) => ({ ...prev, [burnerAddress]: true }));
     } catch (error) {
       console.error('Failed to decrypt key:', error);
