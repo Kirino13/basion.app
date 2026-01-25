@@ -15,7 +15,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
   const [localTaps, setLocalTaps] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [hasSynced, setHasSynced] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [referralBonusClaimed, setReferralBonusClaimed] = useState(false);
@@ -25,9 +24,10 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const pendingSyncRef = useRef(false);
   const isFirstTapRef = useRef(true);
   const lastTxHashRef = useRef<string | null>(null);
+  const pendingTxCountRef = useRef(0);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
-  const { canTap, recordTap } = useTapThrottle();
+  const { canTap, recordTap, completeTap } = useTapThrottle();
   const { 
     tapBalance, 
     points, 
@@ -176,8 +176,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check tap balance
-      if (localTaps <= 0) {
+      // Check tap balance (account for pending transactions)
+      if (localTaps - pendingTxCountRef.current <= 0) {
         setError('Out of taps! Buy more.');
         onOpenDeposit();
         return;
@@ -188,20 +188,17 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return; // Silently ignore too fast taps
       }
 
-      // Check if processing another tap (prevents nonce conflicts)
-      if (isProcessing) {
-        return;
-      }
-
       // Get click position from pointer event
       const clientX = e.clientX;
       const clientY = e.clientY;
 
-      // Start tap - block next tap until this one is sent
-      setIsProcessing(true);
+      // Record tap timing immediately
       recordTap();
+      
+      // Increment pending counter
+      pendingTxCountRef.current++;
 
-      // Create bubble animation (instant visual feedback +1)
+      // Create bubble animation (instant visual feedback)
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
@@ -210,88 +207,90 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       };
       setBubbles((prev) => [...prev, newBubble]);
 
-      // Optimistic UI update
-      setLocalTaps((prev) => Math.max(0, prev - 1));
+      // Update local taps immediately for responsive UI
+      setLocalTaps(prev => Math.max(0, prev - 1));
 
-      try {
-        // Send tap transaction via burner wallet (wait for tx to be sent, not confirmed)
-        const tx = await sendTap();
-        
-        // Save txHash for authentication
-        const txHash = tx.hash;
-        lastTxHashRef.current = txHash;
-
-        // Update state from contract after 2 seconds (don't block next tap)
-        setTimeout(async () => {
-          await refetchGameStats();
+      // Fire and forget - send transaction without blocking
+      sendTap()
+        .then(async (tx) => {
+          // Save txHash for authentication
+          const txHash = tx.hash;
+          lastTxHashRef.current = txHash;
+          
+          // Wait for confirmation in background
+          await tx.wait();
+          
+          // Decrement pending counter
+          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
+          completeTap();
+          
+          // Fetch updated stats from contract
+          refetchGameStats();
           
           // Call success callback
           if (onTapSuccess) {
             onTapSuccess();
           }
 
+          // Send commission (fire and forget)
+          if (address) {
+            fetch('/api/commission', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 
+                fromWallet: address,
+                txHash: txHash,
+              }),
+            }).catch(() => {});
+          }
+
+          // Claim referral bonus on first tap
+          if (address && isFirstTapRef.current && !referralBonusClaimed) {
+            isFirstTapRef.current = false;
+            fetch('/api/referral/claim-bonus', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userWallet: address }),
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.bonusApplied) {
+                  setReferralBonusClaimed(true);
+                }
+              })
+              .catch(() => {});
+          }
+
           // Schedule sync
           scheduleSync(txHash);
-        }, 2000);
-
-        // Send commission (fire and forget)
-        if (address) {
-          fetch('/api/commission', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              fromWallet: address,
-              txHash: txHash,
-            }),
-          }).catch(() => {});
-        }
-
-        // Claim referral bonus on first tap
-        if (address && isFirstTapRef.current && !referralBonusClaimed) {
-          isFirstTapRef.current = false;
-          fetch('/api/referral/claim-bonus', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userWallet: address }),
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (data.bonusApplied) {
-                setReferralBonusClaimed(true);
-              }
-            })
-            .catch(() => {});
-        }
-      } catch (err) {
-        console.error('Tap error:', err);
-        
-        // Analyze error
-        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-        
-        if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
-          setError('Insufficient ETH for gas');
-        } else if (errorMessage.includes('No burner')) {
-          setError('Tap wallet not found');
-        } else if (errorMessage.includes('nonce')) {
-          // Nonce error - don't show, will resolve on next tap
-        } else if (errorMessage.includes('No taps')) {
-          setError('Out of taps! Buy more.');
-        }
-        
-        // Rollback optimistic update
-        setLocalTaps((prev) => prev + 1);
-        
-        // Refetch to get actual state
-        refetchGameStats();
-      } finally {
-        // Allow next tap
-        setIsProcessing(false);
-      }
+        })
+        .catch((err) => {
+          console.error('Tap error:', err);
+          
+          // Restore tap on error
+          pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
+          completeTap();
+          setLocalTaps(prev => prev + 1);
+          
+          // Analyze error
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          
+          if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
+            setError('Insufficient ETH for gas');
+          } else if (errorMessage.includes('No burner')) {
+            setError('Tap wallet not found');
+          } else if (errorMessage.includes('nonce')) {
+            // Nonce error - don't show, just retry on next tap
+          } else if (errorMessage.includes('No taps')) {
+            setError('Out of taps! Buy more.');
+            setLocalTaps(0);
+          }
+        });
     },
-    [isConnected, hasBurner, localTaps, canTap, isProcessing, sendTap, recordTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
+    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
-  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring || isProcessing;
+  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
