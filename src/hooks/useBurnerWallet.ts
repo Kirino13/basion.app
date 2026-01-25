@@ -20,6 +20,10 @@ let cachedWallet: ethers.Wallet | null = null;
 let cachedContract: ethers.Contract | null = null;
 let cachedBurnerKey: string | null = null;
 
+// Nonce management for parallel transactions
+let currentNonce: number | null = null;
+let noncePromise: Promise<number> | null = null;
+
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
 
@@ -199,6 +203,7 @@ export function useBurnerWallet() {
   }, [mainWallet]);
 
   // Get existing burner wallet for current mainWallet
+  // OPTIMIZED: No wallet creation for validation - just return stored data
   const getBurner = useCallback((): { address: string; privateKey: string } | null => {
     if (typeof window === 'undefined') return null;
     if (!mainWallet) return null;
@@ -208,21 +213,11 @@ export function useBurnerWallet() {
     const address = localStorage.getItem(keys.burnerAddress);
     if (!privateKey || !address) return null;
 
-    try {
-      // Validate key by creating wallet
-      const wallet = new ethers.Wallet(privateKey);
-      return {
-        address: wallet.address,
-        privateKey: privateKey,
-      };
-    } catch (err) {
-      console.error('Invalid burner key in localStorage:', err);
-      localStorage.removeItem(keys.burnerKey);
-      localStorage.removeItem(keys.burnerAddress);
-      setBurnerAddress(null);
-      setHasBurner(false);
-      return null;
-    }
+    // Return stored data directly - validation happens when wallet is created in sendTap
+    return {
+      address: address,
+      privateKey: privateKey,
+    };
   }, [mainWallet]);
 
   // Get burner address without loading full wallet
@@ -281,25 +276,49 @@ export function useBurnerWallet() {
   }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
-  // OPTIMIZED: Uses cached wallet/contract, no balance checks = ~1 sec per tap
+  // OPTIMIZED: Uses cached wallet/contract + manual nonce management for parallel txs
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
       throw new Error('No burner wallet found. Please complete deposit first.');
     }
 
+    const provider = getProvider();
+
     // Use cached wallet/contract if same burner (avoids recreating objects)
     if (cachedBurnerKey !== burnerData.privateKey || !cachedWallet || !cachedContract) {
-      const provider = getProvider();
       cachedWallet = new ethers.Wallet(burnerData.privateKey, provider);
       cachedContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, cachedWallet);
       cachedBurnerKey = burnerData.privateKey;
+      currentNonce = null; // Reset nonce for new wallet
     }
 
-    // Single RPC call - no balance/gas checks for speed
-    // If gas insufficient, tx will fail with clear error
-    const tx = await cachedContract.tap();
-    return tx;
+    // Get nonce - only fetch from RPC once, then increment locally
+    if (currentNonce === null) {
+      // Prevent race condition on first fetch
+      if (!noncePromise) {
+        noncePromise = provider.getTransactionCount(cachedWallet.address, 'pending');
+      }
+      currentNonce = await noncePromise;
+      noncePromise = null;
+    }
+
+    // Use current nonce and increment for next tx
+    const nonce = currentNonce;
+    currentNonce++;
+
+    try {
+      // Send tx with explicit nonce - no waiting for RPC nonce fetch
+      const tx = await cachedContract.tap({ nonce });
+      return tx;
+    } catch (err) {
+      // On error (e.g. nonce too low), reset nonce to refetch
+      const errorMsg = err instanceof Error ? err.message : '';
+      if (errorMsg.includes('nonce') || errorMsg.includes('replacement')) {
+        currentNonce = null;
+      }
+      throw err;
+    }
   }, [getBurner]);
 
   // Send multiple taps at once (for batch mode)
