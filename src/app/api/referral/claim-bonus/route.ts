@@ -1,8 +1,41 @@
 import { NextResponse } from 'next/server';
+import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
+import { BASION_ABI } from '@/config/abi';
 
 const REFERRAL_BONUS = 10; // +10% boost
 const MAX_REFERRALS = 5;   // Max 5 referrals = 50% boost for referrer
+
+// Owner private key for calling setBoost on contract
+const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
+
+// Helper function to sync boost to contract
+async function syncBoostToContract(address: string, boostPercent: number): Promise<boolean> {
+  if (!OWNER_PRIVATE_KEY) {
+    console.warn('OWNER_PRIVATE_KEY not set - boost not synced to contract');
+    return false;
+  }
+  
+  try {
+    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
+    
+    // Convert boost percent to multiplier (20% boost = 120 multiplier)
+    const multiplier = 100 + boostPercent;
+    
+    // Call setBoost on contract (multiplier, 0 bonus taps)
+    const tx = await contract.setBoost(address, multiplier, 0);
+    await tx.wait(1);
+    
+    console.log(`Boost synced to contract: ${address} -> ${multiplier}x`);
+    return true;
+  } catch (error) {
+    console.error('Failed to sync boost to contract:', error);
+    return false;
+  }
+}
 
 // POST /api/referral/claim-bonus
 // Called on first tap to apply referral bonuses
@@ -63,6 +96,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to apply bonus' }, { status: 500 });
     }
 
+    // Sync user boost to contract
+    const userContractSynced = await syncBoostToContract(normalizedUser, newUserBoost);
+
     // Get referrer data and apply bonus if under limit
     const { data: referrerData } = await supabase
       .from('users')
@@ -88,6 +124,8 @@ export async function POST(request: Request) {
 
       if (!referrerUpdateError) {
         referrerBonusApplied = true;
+        // Sync referrer boost to contract
+        await syncBoostToContract(referrerWallet, newReferrerBoost);
       }
     } else {
       // Just increment count
@@ -102,6 +140,7 @@ export async function POST(request: Request) {
       bonusApplied: true,
       userBoost: newUserBoost,
       referrerBonusApplied,
+      userContractSynced,
       message: `+${REFERRAL_BONUS}% boost applied!`
     });
   } catch (error) {
