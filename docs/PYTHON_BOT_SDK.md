@@ -76,9 +76,9 @@ import httpx
 # =============================================================================
 
 API_BASE = "https://basion.app"
-RPC_URL = "https://sepolia.base.org"
-CONTRACT_ADDRESS = "0x6bdd40883a4828DfFcE33C3A2222a0eFd31DFe1A"
-CHAIN_ID = 84532
+RPC_URL = "https://mainnet.base.org"
+CONTRACT_ADDRESS = "0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a"
+CHAIN_ID = 8453
 
 # Package options: {package_id: (usd_price, taps, eth_price)}
 PACKAGES = {
@@ -1129,10 +1129,10 @@ bot.reset_nonce()  # Reset local nonce cache
 
 | Item | Value |
 |------|-------|
-| Contract | `0x6bdd40883a4828DfFcE33C3A2222a0eFd31DFe1A` |
-| Network | Base Sepolia |
-| Chain ID | 84532 |
-| RPC | https://sepolia.base.org |
+| Contract | `0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a` |
+| Network | Base Mainnet |
+| Chain ID | 8453 |
+| RPC | https://mainnet.base.org |
 
 ### Packages
 

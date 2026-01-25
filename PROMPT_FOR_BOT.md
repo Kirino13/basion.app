@@ -82,9 +82,9 @@ PRIVATE_KEY:PROXY
 
 ## Blockchain Transactions (web3.py)
 
-Contract: 0x6bdd40883a4828DfFcE33C3A2222a0eFd31DFe1A
-Chain ID: 84532 (Base Sepolia)
-RPC: https://sepolia.base.org
+Contract: 0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a
+Chain ID: 8453 (Base Mainnet)
+RPC: https://mainnet.base.org
 
 Функции контракта:
 - registerBurner(address burner) - регистрация burner, value=0
@@ -98,9 +98,9 @@ RPC: https://sepolia.base.org
 ## Константы
 
 API_BASE = "https://basion.app"
-RPC_URL = "https://sepolia.base.org"
-CONTRACT = "0x6bdd40883a4828DfFcE33C3A2222a0eFd31DFe1A"
-CHAIN_ID = 84532
+RPC_URL = "https://mainnet.base.org"
+CONTRACT = "0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a"
+CHAIN_ID = 8453
 TAP_DELAY = 1.1  # seconds
 DEPOSIT_ETH = 0.003
 PACKAGE_ID = 1

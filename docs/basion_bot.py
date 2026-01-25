@@ -29,9 +29,9 @@ import httpx
 # =============================================================================
 
 API_BASE = "https://basion.app"
-RPC_URL = "https://sepolia.base.org"
-CONTRACT_ADDRESS = "0x6bdd40883a4828DfFcE33C3A2222a0eFd31DFe1A"
-CHAIN_ID = 84532
+RPC_URL = "https://mainnet.base.org"
+CONTRACT_ADDRESS = "0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a"
+CHAIN_ID = 8453
 
 # Package options: {package_id: (usd_price, taps, eth_price)}
 PACKAGES = {
