@@ -22,7 +22,6 @@ let cachedBurnerKey: string | null = null;
 
 // Nonce management for parallel transactions
 let currentNonce: number | null = null;
-let noncePromise: Promise<number> | null = null;
 
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
@@ -276,7 +275,7 @@ export function useBurnerWallet() {
   }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
-  // OPTIMIZED: Uses cached wallet/contract + manual nonce management for parallel txs
+  // OPTIMIZED: Cached wallet/contract + manual nonce for parallel txs (1 tap/sec)
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
@@ -285,40 +284,25 @@ export function useBurnerWallet() {
 
     const provider = getProvider();
 
-    // Use cached wallet/contract if same burner (avoids recreating objects)
+    // Cache wallet/contract (created once per burner)
     if (cachedBurnerKey !== burnerData.privateKey || !cachedWallet || !cachedContract) {
       cachedWallet = new ethers.Wallet(burnerData.privateKey, provider);
       cachedContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, cachedWallet);
       cachedBurnerKey = burnerData.privateKey;
-      currentNonce = null; // Reset nonce for new wallet
+      currentNonce = null;
     }
 
-    // Get nonce - only fetch from RPC once, then increment locally
+    // Get nonce - fetch once from RPC, then increment locally
     if (currentNonce === null) {
-      // Prevent race condition on first fetch
-      if (!noncePromise) {
-        noncePromise = provider.getTransactionCount(cachedWallet.address, 'pending');
-      }
-      currentNonce = await noncePromise;
-      noncePromise = null;
+      currentNonce = await provider.getTransactionCount(cachedWallet.address, 'pending');
     }
 
     // Use current nonce and increment for next tx
-    const nonce = currentNonce;
-    currentNonce++;
+    const nonce = currentNonce++;
 
-    try {
-      // Send tx with explicit nonce - no waiting for RPC nonce fetch
-      const tx = await cachedContract.tap({ nonce });
-      return tx;
-    } catch (err) {
-      // On error (e.g. nonce too low), reset nonce to refetch
-      const errorMsg = err instanceof Error ? err.message : '';
-      if (errorMsg.includes('nonce') || errorMsg.includes('replacement')) {
-        currentNonce = null;
-      }
-      throw err;
-    }
+    // Single RPC call with explicit nonce
+    const tx = await cachedContract.tap({ nonce });
+    return tx;
   }, [getBurner]);
 
   // Send multiple taps at once (for batch mode)

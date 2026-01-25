@@ -4,7 +4,7 @@ import { useRef, useCallback } from 'react';
 import { GAME_CONFIG } from '@/config/constants';
 
 const COOLDOWN_MS = GAME_CONFIG.tapCooldownMs;
-const MAX_PENDING_TAPS = 3; // Allow up to 3 taps in queue
+const MAX_PENDING_TAPS = 10; // Allow up to 10 taps in queue
 
 export function useTapThrottle() {
   const lastTapTimeRef = useRef<number>(0);

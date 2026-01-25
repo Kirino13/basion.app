@@ -274,6 +274,8 @@ function HomeContent() {
           </div>
         </div>
       </div>
+      {/* Version marker for deploy verification */}
+      <span className="hidden" data-version="v2.2-tap-fix">v2.2</span>
     </div>
   );
 }
