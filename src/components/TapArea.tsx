@@ -154,9 +154,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Prevent default to avoid any browser handling
       e.preventDefault();
       
-      // Debug log
-      console.log('TAP START', Date.now(), 'pending:', pendingTxCountRef.current);
-      
       // Clear previous error
       setError(null);
 
@@ -200,7 +197,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       
       // Increment pending counter
       pendingTxCountRef.current++;
-      console.log('TAP RECORDED', Date.now(), 'pending:', pendingTxCountRef.current);
 
       // Create bubble animation (instant visual feedback)
       const newBubble: FloatingText = {
@@ -217,7 +213,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Fire and forget - send transaction without blocking
       sendTap()
         .then(async (tx) => {
-          console.log('TAP TX SENT', Date.now(), 'hash:', tx.hash);
           // Save txHash for authentication
           const txHash = tx.hash;
           lastTxHashRef.current = txHash;

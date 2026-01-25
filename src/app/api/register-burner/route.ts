@@ -27,10 +27,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Signature required' }, { status: 401 });
     }
 
-    // Verify timestamp (5 minute window)
+    // Verify timestamp (5 minute window, not too far in future)
     const ts = parseInt(timestamp);
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
-      return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
+      return NextResponse.json({ error: 'Signature expired or invalid timestamp' }, { status: 401 });
     }
 
     // Verify signature
@@ -54,7 +54,6 @@ export async function POST(request: Request) {
 
     // If Supabase is not configured, just return success (for development)
     if (!supabase) {
-      console.log('Supabase not configured, skipping database storage');
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 

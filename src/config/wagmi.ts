@@ -1,15 +1,21 @@
 import { http, createConfig } from 'wagmi';
-import { baseSepolia } from 'wagmi/chains';
+import { base, baseSepolia } from 'wagmi/chains';
 import { injected, coinbaseWallet } from 'wagmi/connectors';
+import { RPC_URL, CHAIN_ID } from './constants';
+
+// Determine which chain to use based on CHAIN_ID env var
+// 8453 = Base Mainnet, 84532 = Base Sepolia
+const isMainnet = CHAIN_ID === 8453;
+const activeChain = isMainnet ? base : baseSepolia;
 
 export const config = createConfig({
-  chains: [baseSepolia],
+  chains: [activeChain],
   connectors: [
     injected(),
     coinbaseWallet({ appName: 'Basion.app' }),
   ],
   transports: {
-    [baseSepolia.id]: http('https://sepolia.base.org'),
+    [activeChain.id]: http(RPC_URL),
   },
 });
 

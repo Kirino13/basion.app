@@ -3,23 +3,11 @@ import { ethers } from 'ethers';
 import { verifyMessage } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
-import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
+import { CONTRACT_ADDRESS, RPC_URL, COMMISSION_WALLETS as RAW_WALLETS, COMMISSION_PERCENT } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
-// Commission configuration - 10% of each tap goes to random admin wallet
-const COMMISSION_PERCENT = 0.1;
-const COMMISSION_WALLETS = [
-  '0x7cf0E9B33800E21fD69Aa3Fe693B735A121AA950',
-  '0x338388413cb284B31122B84da5E330017A8692C0',
-  '0x5f878c7D5F4B25F5730A703a65d1492bc2b16cfB',
-  '0x953e94EEf0740b77E230EEd5849432E2C9e4b2B2',
-  '0x174f44A473Bb7aDfe005157abc8EAc27Bf3575f3',
-  '0x8dD04af9be247A87438da2812C555C3c0F4df8d7',
-  '0x882ABb7ab668188De2F80A02c958C3f88f5B0db4',
-  '0xceF725dB47160438787b6ED362162DafCA6677cd',
-  '0x8d1eE41E1AC330C96E36f272Cc1bE3572fB30c97',
-  '0xbc189B1BC53adC93c6019DD03feccf4311D0175a',
-].map(w => w.toLowerCase());
+// Normalize commission wallets to lowercase
+const COMMISSION_WALLETS = RAW_WALLETS.map(w => w.toLowerCase());
 
 /**
  * POST /api/tap

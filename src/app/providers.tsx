@@ -21,7 +21,6 @@ function WalletGuard({ children }: { children: React.ReactNode }) {
 
     // If we had a previous address and it changed = wallet switch in MetaMask/Rabby
     if (previousAddressRef.current && previousAddressRef.current.toLowerCase() !== address.toLowerCase()) {
-      console.log('Wallet switched in provider. Please reconnect.');
       disconnect();
       return;
     }

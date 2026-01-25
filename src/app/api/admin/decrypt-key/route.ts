@@ -24,9 +24,9 @@ export async function POST(request: Request) {
     }
 
     const ts = parseInt(timestamp);
-    // Check timestamp is within 5 minutes
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000) {
-      return NextResponse.json({ error: 'Signature expired' }, { status: 401 });
+    // Check timestamp is within 5 minutes and not too far in future
+    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
+      return NextResponse.json({ error: 'Signature expired or invalid timestamp' }, { status: 401 });
     }
 
     // Verify signature

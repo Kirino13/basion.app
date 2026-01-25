@@ -144,7 +144,6 @@ export function useBurnerWallet() {
       // Burner exists on backend but private key is encrypted server-side
       // We can only use it if we have the key in localStorage
       // Otherwise, user needs to create a new burner (via new deposit)
-      console.log('Burner exists on backend:', data.burnerAddress);
       
       // Check if we have the key locally
       const localKey = localStorage.getItem(keys.burnerKey);
@@ -168,7 +167,6 @@ export function useBurnerWallet() {
       
       // No valid local key - user needs to create new burner
       // This can happen if user clears browser data
-      console.log('No local key available for burner restoration');
       return null;
     } catch (err) {
       console.error('Error checking burner on backend:', err);

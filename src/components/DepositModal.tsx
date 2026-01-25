@@ -93,15 +93,16 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         setStep('done');
         refetchGameStats();
         
-        // Register referral if exists
+        // Register referral if exists (authenticated with txHash)
         const referrer = getReferrer();
-        if (address && referrer && referrer !== '0x0000000000000000000000000000000000000000') {
+        if (address && txHash && referrer && referrer !== '0x0000000000000000000000000000000000000000') {
           fetch('/api/referral/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
               userWallet: address, 
-              referrerWallet: referrer 
+              referrerWallet: referrer,
+              txHash: txHash,
             }),
           }).catch(() => {});
         }
