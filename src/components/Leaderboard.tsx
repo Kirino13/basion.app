@@ -102,14 +102,15 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* List — max 10 entries visible, scrollable, dark blue scrollbar always visible */}
+      {/* List — exactly 10 entries visible, scrollable for more */}
       <div 
-        className="overflow-y-auto overflow-x-hidden px-3 py-2 leaderboard-scroll" 
+        className="overflow-x-hidden px-3 py-2 leaderboard-scroll" 
         style={{ 
           display: 'flex', 
           flexDirection: 'column', 
           gap: '8px',
-          maxHeight: '520px', // ~10 entries * 52px each
+          maxHeight: '580px', // Exactly 10 entries visible (52px * 10 + 9 gaps * 8px)
+          overflowY: entries.length > 10 ? 'auto' : 'hidden',
         }}
       >
         {error ? (
