@@ -73,17 +73,25 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     return points.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   };
 
+  // Calculate exact height for 10 entries
+  // Each entry: py-[14px] = 28px + content ~28px = 56px
+  // 10 entries = 560px, 9 gaps of 8px = 72px, container py-2 = 16px
+  const ENTRY_HEIGHT = 56;
+  const GAP = 8;
+  const VISIBLE_ENTRIES = 10;
+  const listMaxHeight = VISIBLE_ENTRIES * ENTRY_HEIGHT + (VISIBLE_ENTRIES - 1) * GAP;
+
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full h-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
+      <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
         <div className="px-5 py-3 border-b border-white/30 flex items-center gap-3 shrink-0">
           <div className="p-2 bg-white/30 rounded-xl">
             <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
           </div>
           <h3 className="text-[#0B1B3A] font-bold text-lg">Leaderboard</h3>
         </div>
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-center justify-center py-8">
           <div className="animate-pulse text-slate-500">Loading...</div>
         </div>
       </div>
@@ -91,7 +99,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
+    <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
       {/* Header */}
       <div className="px-5 py-3 border-b border-white/30 flex items-center gap-3 shrink-0">
         <div className="p-2 bg-white/30 rounded-xl">
@@ -102,15 +110,15 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
         </h3>
       </div>
 
-      {/* List — exactly 10 entries visible, scrollable for more */}
+      {/* List — exactly 10 entries visible, scrollable for 11+ */}
       <div 
         className="overflow-x-hidden px-3 py-2 leaderboard-scroll" 
         style={{ 
           display: 'flex', 
           flexDirection: 'column', 
-          gap: '8px',
-          maxHeight: '580px', // Exactly 10 entries visible (52px * 10 + 9 gaps * 8px)
-          overflowY: entries.length > 10 ? 'auto' : 'hidden',
+          gap: `${GAP}px`,
+          maxHeight: `${listMaxHeight}px`,
+          overflowY: entries.length > VISIBLE_ENTRIES ? 'auto' : 'hidden',
         }}
       >
         {error ? (
