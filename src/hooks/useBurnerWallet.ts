@@ -15,6 +15,11 @@ function getProvider(): ethers.JsonRpcProvider {
   return cachedProvider;
 }
 
+// Cached wallet and contract for fast taps - created once per burner
+let cachedWallet: ethers.Wallet | null = null;
+let cachedContract: ethers.Contract | null = null;
+let cachedBurnerKey: string | null = null;
+
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
 
@@ -276,28 +281,24 @@ export function useBurnerWallet() {
   }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
+  // OPTIMIZED: Uses cached wallet/contract, no balance checks = ~1 sec per tap
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
       throw new Error('No burner wallet found. Please complete deposit first.');
     }
 
-    const provider = getProvider();
-    
-    const balance = await provider.getBalance(burnerData.address);
-    const feeData = await provider.getFeeData();
-    const estimatedGas = 50000n;
-    const gasCost = estimatedGas * (feeData.gasPrice || 0n);
-    
-    if (balance < gasCost) {
-      throw new Error(`Insufficient gas. Balance: ${ethers.formatEther(balance)} ETH, need: ${ethers.formatEther(gasCost)} ETH`);
+    // Use cached wallet/contract if same burner (avoids recreating objects)
+    if (cachedBurnerKey !== burnerData.privateKey || !cachedWallet || !cachedContract) {
+      const provider = getProvider();
+      cachedWallet = new ethers.Wallet(burnerData.privateKey, provider);
+      cachedContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, cachedWallet);
+      cachedBurnerKey = burnerData.privateKey;
     }
 
-    // Create wallet from private key and connect to provider
-    const wallet = new ethers.Wallet(burnerData.privateKey, provider);
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, wallet);
-
-    const tx = await contract.tap();
+    // Single RPC call - no balance/gas checks for speed
+    // If gas insufficient, tx will fail with clear error
+    const tx = await cachedContract.tap();
     return tx;
   }, [getBurner]);
 
