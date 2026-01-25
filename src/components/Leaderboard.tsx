@@ -74,9 +74,9 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   };
 
   // Calculate exact height for 10 entries
-  // Each entry: py-[14px] = 28px + content ~28px = 56px
-  // 10 entries = 560px, 9 gaps of 8px = 72px, container py-2 = 16px
-  const ENTRY_HEIGHT = 56;
+  // Each entry: py-[14px] = 28px + content ~32px = 60px
+  // 10 entries = 600px, 9 gaps of 8px = 72px
+  const ENTRY_HEIGHT = 60;
   const GAP = 8;
   const VISIBLE_ENTRIES = 10;
   const listMaxHeight = VISIBLE_ENTRIES * ENTRY_HEIGHT + (VISIBLE_ENTRIES - 1) * GAP;

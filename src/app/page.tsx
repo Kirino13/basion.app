@@ -173,7 +173,7 @@ function HomeContent() {
                         animate={{ scale: 1, opacity: 1 }}
                         className="flex items-center gap-2"
                       >
-                        <Copy size={22} className="text-blue-600" /> Invite
+                        <Copy size={22} className="text-blue-600" /> Invite +10%
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -197,7 +197,7 @@ function HomeContent() {
                 <div className="flex-1 bg-white py-2 px-3 rounded-2xl shadow-xl shadow-blue-900/10 flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="CODE"
+                    placeholder="Code for Boost +20%"
                     value={boostCode}
                     onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
                     onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}

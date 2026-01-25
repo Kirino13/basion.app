@@ -78,7 +78,7 @@ const ReferralLink: React.FC = () => {
               animate={{ scale: 1, opacity: 1 }}
               className="flex items-center gap-2"
             >
-              <Copy size={18} /> Copy Invite Link
+              <Copy size={18} /> Copy Invite Link +10%
             </motion.div>
           )}
         </AnimatePresence>
