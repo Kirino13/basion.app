@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
-import { baseSepolia } from 'wagmi/chains';
 import { Wallet } from 'lucide-react';
+import { CHAIN_ID } from '@/config/constants';
 
 interface WalletConnectProps {
   className?: string;
@@ -16,7 +16,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
   const { switchChain } = useSwitchChain();
   const [isButtonDisabled, setIsButtonDisabled] = useState(false);
 
-  const isWrongNetwork = isConnected && chainId !== baseSepolia.id;
+  const isWrongNetwork = isConnected && chainId !== CHAIN_ID;
 
   // Reset pending state after timeout (in case it gets stuck)
   useEffect(() => {
@@ -46,7 +46,7 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
 
   // Handle network switch
   const handleSwitchNetwork = useCallback(() => {
-    switchChain({ chainId: baseSepolia.id });
+    switchChain({ chainId: CHAIN_ID as 8453 | 84532 });
   }, [switchChain]);
 
   // Memoize display address
