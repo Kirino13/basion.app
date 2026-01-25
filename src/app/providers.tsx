@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { config } from '@/config/wagmi';
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useSwitchChain, useDisconnect } from 'wagmi';
-import { baseSepolia } from 'wagmi/chains';
+import { CHAIN_ID } from '@/config/constants';
 
 // Component to handle wallet switching - just disconnect on switch, don't clear anything
 function WalletGuard({ children }: { children: React.ReactNode }) {
@@ -38,9 +38,9 @@ function NetworkSwitcher({ children }: { children: React.ReactNode }) {
   const { switchChain } = useSwitchChain();
 
   useEffect(() => {
-    // Auto switch to Base Sepolia when connected to wrong network
-    if (isConnected && chainId && chainId !== baseSepolia.id) {
-      switchChain({ chainId: baseSepolia.id });
+    // Auto switch to configured chain when connected to wrong network
+    if (isConnected && chainId && chainId !== CHAIN_ID) {
+      switchChain({ chainId: CHAIN_ID as 8453 | 84532 });
     }
   }, [isConnected, chainId, switchChain]);
 
