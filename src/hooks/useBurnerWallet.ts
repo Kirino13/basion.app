@@ -20,8 +20,12 @@ let cachedWallet: ethers.Wallet | null = null;
 let cachedContract: ethers.Contract | null = null;
 let cachedBurnerKey: string | null = null;
 
-// Nonce management for parallel transactions
+// Nonce and gas management for parallel transactions
 let currentNonce: number | null = null;
+let cachedGasPrice: bigint | null = null;
+let gasPriceLastFetch: number = 0;
+const GAS_PRICE_CACHE_MS = 30000; // Cache gas price for 30 seconds
+const FIXED_GAS_LIMIT = 100000n; // Fixed gas limit for tap() - we know it uses ~50k
 
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
@@ -275,7 +279,7 @@ export function useBurnerWallet() {
   }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
-  // OPTIMIZED: Cached wallet/contract + manual nonce for parallel txs (1 tap/sec)
+  // OPTIMIZED: All params explicit to avoid RPC calls - enables 1 tap/sec
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
@@ -290,6 +294,7 @@ export function useBurnerWallet() {
       cachedContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, cachedWallet);
       cachedBurnerKey = burnerData.privateKey;
       currentNonce = null;
+      cachedGasPrice = null;
     }
 
     // Get nonce - fetch once from RPC, then increment locally
@@ -297,11 +302,23 @@ export function useBurnerWallet() {
       currentNonce = await provider.getTransactionCount(cachedWallet.address, 'pending');
     }
 
+    // Get gas price - cache for 30 seconds to avoid RPC calls
+    const now = Date.now();
+    if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
+      const feeData = await provider.getFeeData();
+      cachedGasPrice = feeData.gasPrice || 1000000000n; // fallback 1 gwei
+      gasPriceLastFetch = now;
+    }
+
     // Use current nonce and increment for next tx
     const nonce = currentNonce++;
 
-    // Single RPC call with explicit nonce
-    const tx = await cachedContract.tap({ nonce });
+    // Send with ALL params explicit - NO additional RPC calls needed
+    const tx = await cachedContract.tap({
+      nonce,
+      gasLimit: FIXED_GAS_LIMIT,
+      gasPrice: cachedGasPrice,
+    });
     return tx;
   }, [getBurner]);
 
