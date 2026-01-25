@@ -1,5 +1,11 @@
 import { NextResponse } from 'next/server';
+import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
+import { BASION_ABI } from '@/config/abi';
+
+// Owner private key for calling setBoost on contract
+const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
 
 // Rate limiting to prevent brute-force attacks
 const rateLimitMap = new Map<string, { count: number; resetAt: number; blockedUntil?: number }>();
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
     const newBoost = Math.min(currentBoost + boostAmount, 100);
     const newUsedCodes = [...usedCodes, normalizedCode];
 
-    // Update user
+    // Update user in database
     const { error: updateError } = await supabase
       .from('users')
       .upsert({
@@ -112,10 +118,36 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'UPDATE_FAILED' }, { status: 500 });
     }
 
+    // Sync boost to smart contract if owner key is configured
+    let contractSynced = false;
+    if (OWNER_PRIVATE_KEY) {
+      try {
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
+        const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
+        
+        // Convert boost percent to multiplier (20% boost = 120 multiplier)
+        const newMultiplier = 100 + newBoost;
+        
+        // Call setBoost on contract (multiplier, 0 bonus taps)
+        const tx = await contract.setBoost(address, newMultiplier, 0);
+        await tx.wait(1);
+        
+        contractSynced = true;
+        console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x`);
+      } catch (contractError) {
+        console.error('Failed to sync boost to contract:', contractError);
+        // Continue anyway - DB is updated, contract sync is best-effort
+      }
+    } else {
+      console.warn('OWNER_PRIVATE_KEY not set - boost not synced to contract');
+    }
+
     return NextResponse.json({ 
       ok: true, 
       boostPercent: newBoost,
-      addedBoost: boostAmount
+      addedBoost: boostAmount,
+      contractSynced
     });
   } catch (error) {
     console.error('Boost redeem error:', error);
