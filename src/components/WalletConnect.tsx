@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAccount, useConnect, useDisconnect, useSwitchChain } from 'wagmi';
 import { Wallet } from 'lucide-react';
 import { CHAIN_ID } from '@/config/constants';
@@ -13,10 +13,23 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
   const { address, isConnected, chainId, isConnecting, isReconnecting } = useAccount();
   const { connectors, connect, isPending, reset } = useConnect();
   const { disconnect } = useDisconnect();
-  const { switchChain } = useSwitchChain();
+  const { switchChain, isPending: isSwitching } = useSwitchChain();
   const [isButtonDisabled, setIsButtonDisabled] = useState(false);
+  const switchAttemptedRef = useRef(false);
 
   const isWrongNetwork = isConnected && chainId !== CHAIN_ID;
+
+  // Auto-switch network when connected to wrong chain
+  useEffect(() => {
+    if (isWrongNetwork && !isSwitching && !switchAttemptedRef.current) {
+      switchAttemptedRef.current = true;
+      switchChain({ chainId: CHAIN_ID as 8453 | 84532 });
+    }
+    // Reset flag when on correct network
+    if (!isWrongNetwork) {
+      switchAttemptedRef.current = false;
+    }
+  }, [isWrongNetwork, isSwitching, switchChain]);
 
   // Reset pending state after timeout (in case it gets stuck)
   useEffect(() => {
@@ -44,8 +57,9 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
     }
   }, [isButtonDisabled, connectors, connect]);
 
-  // Handle network switch
+  // Handle manual network switch (fallback)
   const handleSwitchNetwork = useCallback(() => {
+    switchAttemptedRef.current = false; // Reset to allow retry
     switchChain({ chainId: CHAIN_ID as 8453 | 84532 });
   }, [switchChain]);
 
@@ -55,14 +69,16 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   }, [address]);
 
+  // Show switching state or fallback button
   if (isWrongNetwork) {
     return (
       <button
         onClick={handleSwitchNetwork}
-        className={`py-3 px-6 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 bg-orange-500 text-white hover:bg-orange-600 shadow-orange-900/30 ${className}`}
+        disabled={isSwitching}
+        className={`py-3 px-6 rounded-xl font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 bg-orange-500 text-white hover:bg-orange-600 shadow-orange-900/30 disabled:opacity-70 ${className}`}
       >
         <Wallet className="w-4 h-4" />
-        Switch to Base
+        {isSwitching ? 'Switching...' : 'Switch to Base'}
       </button>
     );
   }
