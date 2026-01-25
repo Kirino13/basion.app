@@ -183,7 +183,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         return;
       }
 
-      // Check cooldown (1 second between taps)
+      // Check cooldown (2 seconds between taps)
       if (!canTap()) {
         return; // Silently ignore too fast taps
       }

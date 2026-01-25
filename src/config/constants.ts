@@ -13,8 +13,8 @@ export const GAME_CONFIG = {
   },
   treasuryPercent: 30,
   burnerPercent: 70,
-  maxTapsPerSecond: 1,
-  tapCooldownMs: 1000,
+  maxTapsPerSecond: 0.5,
+  tapCooldownMs: 2000,
   referral: {
     bonusPercent: 10,        // 10% tap bonus for referrer
     referrerMultiplier: 110, // 1.1x points for referrer

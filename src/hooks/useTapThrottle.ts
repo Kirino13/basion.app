@@ -14,7 +14,7 @@ export function useTapThrottle() {
   const canTap = useCallback((): boolean => {
     const now = Date.now();
 
-    // Check cooldown (1 second between taps)
+    // Check cooldown (2 seconds between taps)
     if (now - lastTapTimeRef.current < COOLDOWN_MS) {
       return false;
     }
