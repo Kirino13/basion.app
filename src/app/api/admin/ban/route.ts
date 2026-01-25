@@ -1,7 +1,35 @@
 import { NextResponse } from 'next/server';
+import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { ADMIN_WALLET } from '@/config/constants';
+import { ADMIN_WALLET, CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
+import { BASION_ABI } from '@/config/abi';
 import { verifyMessage } from 'viem';
+
+// Owner private key for calling setBlacklist on contract
+const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
+
+// Helper function to sync blacklist to contract
+async function syncBlacklistToContract(address: string, isBanned: boolean): Promise<boolean> {
+  if (!OWNER_PRIVATE_KEY) {
+    console.warn('OWNER_PRIVATE_KEY not set - blacklist not synced to contract');
+    return false;
+  }
+  
+  try {
+    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
+    
+    const tx = await contract.setBlacklist(address, isBanned);
+    await tx.wait(1);
+    
+    console.log(`Blacklist synced to contract: ${address} -> ${isBanned}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to sync blacklist to contract:', error);
+    return false;
+  }
+}
 
 // POST /api/admin/ban
 // Body: { wallets: string[], action: 'ban' | 'unban' }
@@ -74,7 +102,13 @@ export async function POST(request: Request) {
           banned_at: isBanned ? new Date().toISOString() : null,
         }, { onConflict: 'main_wallet' });
 
-      results.push({ wallet, success: !error, error: error?.message });
+      let contractSynced = false;
+      if (!error) {
+        // Sync to contract
+        contractSynced = await syncBlacklistToContract(wallet, isBanned);
+      }
+
+      results.push({ wallet, success: !error, contractSynced, error: error?.message });
     }
 
     const successCount = results.filter(r => r.success).length;
