@@ -276,6 +276,7 @@ export function useBurnerWallet() {
   }, [mainWallet, signMessageAsync]);
 
   // Send tap transaction via burner wallet
+  // Optimized: no balance/gas checks - if insufficient, tx will fail with clear error
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
@@ -283,17 +284,6 @@ export function useBurnerWallet() {
     }
 
     const provider = getProvider();
-    
-    const balance = await provider.getBalance(burnerData.address);
-    const feeData = await provider.getFeeData();
-    const estimatedGas = 50000n;
-    const gasCost = estimatedGas * (feeData.gasPrice || 0n);
-    
-    if (balance < gasCost) {
-      throw new Error(`Insufficient gas. Balance: ${ethers.formatEther(balance)} ETH, need: ${ethers.formatEther(gasCost)} ETH`);
-    }
-
-    // Create wallet from private key and connect to provider
     const wallet = new ethers.Wallet(burnerData.privateKey, provider);
     const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, wallet);
 
