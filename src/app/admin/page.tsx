@@ -53,6 +53,9 @@ export default function AdminPage() {
   const [decryptedKeys, setDecryptedKeys] = useState<Record<string, string>>({});
   const [copiedKeys, setCopiedKeys] = useState<Record<string, boolean>>({});
   
+  // States for wallet copy
+  const [copiedWallets, setCopiedWallets] = useState<Record<string, boolean>>({});
+  
   // Stats
   const [totalDepositUsd, setTotalDepositUsd] = useState(0);
   const [totalCommission, setTotalCommission] = useState(0);
@@ -273,7 +276,7 @@ export default function AdminPage() {
     }
   };
 
-  // Handle reveal/hide private key (decrypts via server API)
+  // Handle reveal/hide private key (decrypts via server API - no signature needed)
   const handleRevealKey = async (burnerAddress: string, encryptedKey?: string) => {
     if (!encryptedKey) {
       alert('Encrypted key not available');
@@ -287,21 +290,12 @@ export default function AdminPage() {
     }
 
     try {
-      // Get fresh signature for API call
-      const signed = await signForAdmin();
-      if (!signed) {
-        alert('Failed to sign - please try again');
-        return;
-      }
-
-      // Call server API to decrypt
+      // Call server API to decrypt (no signature needed, just admin address)
       const response = await fetch('/api/admin/decrypt-key', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-admin-address': address || '',
-          'x-admin-signature': signed.signature,
-          'x-admin-timestamp': signed.timestamp,
         },
         body: JSON.stringify({ encryptedKey }),
       });
@@ -319,6 +313,15 @@ export default function AdminPage() {
       console.error('Failed to decrypt key:', error);
       alert('Failed to decrypt private key');
     }
+  };
+  
+  // Handle copy wallet address to clipboard
+  const handleCopyWallet = (walletKey: string, walletAddress: string) => {
+    navigator.clipboard.writeText(walletAddress);
+    setCopiedWallets((prev) => ({ ...prev, [walletKey]: true }));
+    setTimeout(() => {
+      setCopiedWallets((prev) => ({ ...prev, [walletKey]: false }));
+    }, 2000);
   };
 
   // Handle copy private key to clipboard
@@ -569,8 +572,23 @@ export default function AdminPage() {
                           className="w-4 h-4 rounded"
                         />
                       </td>
-                      <td className="py-3 font-mono text-sm text-white">
-                        {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white">
+                            {user.main_wallet.slice(0, 8)}...{user.main_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyWallet(`main-${user.main_wallet}`, user.main_wallet)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy address"
+                          >
+                            {copiedWallets[`main-${user.main_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 text-green-400 font-bold">
                         ${(user.total_deposit_usd || 0).toFixed(0)}
@@ -655,11 +673,41 @@ export default function AdminPage() {
                           className="w-4 h-4 rounded"
                         />
                       </td>
-                      <td className="py-3 font-mono text-sm text-white">
-                        {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white">
+                            {burner.burner_wallet.slice(0, 8)}...{burner.burner_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyWallet(`burner-${burner.burner_wallet}`, burner.burner_wallet)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy burner address"
+                          >
+                            {copiedWallets[`burner-${burner.burner_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
-                      <td className="py-3 font-mono text-sm text-white/60">
-                        {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
+                      <td className="py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm text-white/60">
+                            {burner.main_wallet.slice(0, 8)}...{burner.main_wallet.slice(-6)}
+                          </span>
+                          <button
+                            onClick={() => handleCopyWallet(`bmain-${burner.main_wallet}`, burner.main_wallet)}
+                            className="p-1 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
+                            title="Copy main address"
+                          >
+                            {copiedWallets[`bmain-${burner.main_wallet}`] ? (
+                              <Check className="w-3 h-3 text-green-400" />
+                            ) : (
+                              <Copy className="w-3 h-3" />
+                            )}
+                          </button>
+                        </div>
                       </td>
                       <td className="py-3 text-white">{burner.balance || '-'} ETH</td>
                       <td className="py-3">

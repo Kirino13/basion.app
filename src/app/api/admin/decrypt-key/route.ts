@@ -1,44 +1,18 @@
 import { NextResponse } from 'next/server';
-import { verifyMessage } from 'viem';
 import { ADMIN_WALLET } from '@/config/constants';
 import { decryptKey } from '@/lib/encryption';
 
 // POST /api/admin/decrypt-key
 // Admin-only endpoint to decrypt burner private keys
-// Requires signature verification
+// Only requires admin wallet address check (no signature)
 export async function POST(request: Request) {
   try {
-    // Get admin address and signature from headers
+    // Get admin address from headers
     const adminAddress = request.headers.get('x-admin-address')?.toLowerCase();
-    const signature = request.headers.get('x-admin-signature');
-    const timestamp = request.headers.get('x-admin-timestamp');
 
-    // Basic admin address check
+    // Admin address check only
     if (!adminAddress || adminAddress !== ADMIN_WALLET) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
-    }
-
-    // SECURITY: Signature is REQUIRED for admin access
-    if (!signature || !timestamp) {
-      return NextResponse.json({ error: 'Signature required' }, { status: 401 });
-    }
-
-    const ts = parseInt(timestamp);
-    // Check timestamp is within 5 minutes and not too far in future
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
-      return NextResponse.json({ error: 'Signature expired or invalid timestamp' }, { status: 401 });
-    }
-
-    // Verify signature
-    const message = `Basion Admin Access ${timestamp}`;
-    const isValid = await verifyMessage({
-      address: adminAddress as `0x${string}`,
-      message,
-      signature: signature as `0x${string}`,
-    });
-
-    if (!isValid) {
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     // Get encrypted key from body
