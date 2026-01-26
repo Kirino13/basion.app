@@ -224,8 +224,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
           completeTap();
           
-          // Fetch updated stats from contract
-          refetchGameStats();
+          // Fetch updated stats from contract immediately
+          await refetchGameStats();
           
           // Call success callback
           if (onTapSuccess) {

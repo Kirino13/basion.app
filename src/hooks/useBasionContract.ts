@@ -18,7 +18,11 @@ export function useBasionContract() {
     abi: BASION_ABI,
     functionName: 'getPoints',
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { 
+      enabled: !!address,
+      staleTime: 0, // Always fetch fresh data
+      gcTime: 0, // Don't cache
+    },
   });
 
   // Read user info (taps, multiplier, burner)
@@ -31,7 +35,11 @@ export function useBasionContract() {
     abi: BASION_ABI,
     functionName: 'getUserInfo',
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { 
+      enabled: !!address,
+      staleTime: 0,
+      gcTime: 0,
+    },
   });
 
   // Read referral info
@@ -93,20 +101,23 @@ export function useBasionContract() {
   const referrer = referralInfo ? (referralInfo[0] as string) : '';
   const isBatchMode = referralInfo ? (referralInfo[1] as boolean) : false;
 
-  // Refetch all data (async with retry)
-  const refetchGameStats = async (retries = 3, delayMs = 1000): Promise<void> => {
-    for (let i = 0; i < retries; i++) {
+  // Refetch all data (async) - immediate fetch with optional delayed retry
+  const refetchGameStats = async (): Promise<void> => {
+    // First immediate fetch
+    await Promise.all([
+      refetchPoints(),
+      refetchUserInfo(),
+      refetchReferralInfo(),
+    ]);
+    
+    // Schedule a delayed refetch to catch any propagation delays
+    setTimeout(async () => {
       await Promise.all([
         refetchPoints(),
         refetchUserInfo(),
         refetchReferralInfo(),
       ]);
-      
-      // Wait between retries to allow blockchain to update
-      if (i < retries - 1) {
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-    }
+    }, 2000);
   };
 
   const refetchAll = refetchGameStats;
