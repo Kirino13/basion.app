@@ -9,6 +9,9 @@ import { BASION_ABI } from '@/config/abi';
 // Normalize commission wallets to lowercase
 const COMMISSION_WALLETS = RAW_WALLETS.map(w => w.toLowerCase());
 
+// Owner private key for auto-sync boost to contract
+const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
+
 /**
  * POST /api/tap
  * 
@@ -94,10 +97,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // Check if wallet is banned
+    // Check if wallet is banned and get boost_percent for sync
     const { data: userData } = await supabase
       .from('users')
-      .select('is_banned')
+      .select('is_banned, boost_percent')
       .eq('main_wallet', normalizedWallet)
       .single();
 
@@ -162,6 +165,26 @@ export async function POST(request: Request) {
         },
         { status: 400 }
       );
+    }
+
+    // Auto-sync boost to contract before tap (ensures DB and contract are in sync)
+    if (OWNER_PRIVATE_KEY && userData?.boost_percent !== undefined) {
+      try {
+        const expectedMultiplier = 100 + (userData.boost_percent || 0);
+        const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+        const currentMultiplier = await contractRead.pointsMultiplier(wallet);
+        
+        if (Number(currentMultiplier) !== expectedMultiplier) {
+          const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+          const ownerContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
+          const syncTx = await ownerContract.setBoost(wallet, expectedMultiplier, 0);
+          await syncTx.wait(1);
+          console.log(`Auto-synced boost: ${wallet} -> ${expectedMultiplier}`);
+        }
+      } catch (syncErr) {
+        console.warn('Boost auto-sync failed:', syncErr);
+        // Continue anyway - tap will work, just with old multiplier
+      }
     }
 
     // Create contract instance

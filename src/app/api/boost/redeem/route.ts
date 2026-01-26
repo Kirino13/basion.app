@@ -126,15 +126,26 @@ export async function POST(request: Request) {
         const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
         const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
         
-        // Convert boost percent to multiplier (20% boost = 120 multiplier)
-        const newMultiplier = 100 + newBoost;
+        // Read current multiplier from contract to avoid race conditions
+        const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+        const currentContractMultiplier = await contractRead.pointsMultiplier(address);
+        const baseMultiplier = Number(currentContractMultiplier) || 100;
         
-        // Call setBoost on contract (multiplier, 0 bonus taps)
-        const tx = await contract.setBoost(address, newMultiplier, 0);
-        await tx.wait(1);
+        // Convert boost percent to multiplier (20% boost = 120 multiplier)
+        // Use the maximum of current contract value and new calculated value
+        const calculatedMultiplier = 100 + newBoost;
+        const newMultiplier = Math.max(baseMultiplier, calculatedMultiplier);
+        
+        // Only update if the new value is higher
+        if (newMultiplier > baseMultiplier) {
+          const tx = await contract.setBoost(address, newMultiplier, 0);
+          await tx.wait(1);
+          console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x (was ${baseMultiplier})`);
+        } else {
+          console.log(`Boost already set in contract: ${address} -> ${baseMultiplier}x`);
+        }
         
         contractSynced = true;
-        console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x`);
       } catch (contractError) {
         console.error('Failed to sync boost to contract:', contractError);
         // Continue anyway - DB is updated, contract sync is best-effort

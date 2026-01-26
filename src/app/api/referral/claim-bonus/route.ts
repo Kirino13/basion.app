@@ -22,14 +22,25 @@ async function syncBoostToContract(address: string, boostPercent: number): Promi
     const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
     const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
     
+    // Read current multiplier from contract to avoid race conditions
+    const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+    const currentContractMultiplier = await contractRead.pointsMultiplier(address);
+    const baseMultiplier = Number(currentContractMultiplier) || 100;
+    
     // Convert boost percent to multiplier (20% boost = 120 multiplier)
-    const multiplier = 100 + boostPercent;
+    // Use the maximum of current contract value and new calculated value
+    const calculatedMultiplier = 100 + boostPercent;
+    const newMultiplier = Math.max(baseMultiplier, calculatedMultiplier);
     
-    // Call setBoost on contract (multiplier, 0 bonus taps)
-    const tx = await contract.setBoost(address, multiplier, 0);
-    await tx.wait(1);
+    // Only update if the new value is higher
+    if (newMultiplier > baseMultiplier) {
+      const tx = await contract.setBoost(address, newMultiplier, 0);
+      await tx.wait(1);
+      console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x (was ${baseMultiplier})`);
+    } else {
+      console.log(`Boost already set in contract: ${address} -> ${baseMultiplier}x`);
+    }
     
-    console.log(`Boost synced to contract: ${address} -> ${multiplier}x`);
     return true;
   } catch (error) {
     console.error('Failed to sync boost to contract:', error);
