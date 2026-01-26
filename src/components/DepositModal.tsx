@@ -188,6 +188,10 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         await registerBurnerWithBackend(burner.address, burner.privateKey);
       } else {
         setNewBurnerAddress(burner.address);
+        
+        // ALWAYS register existing burner with backend (in case it's not registered yet)
+        // This handles cases where localStorage exists but backend doesn't have the record
+        registerBurnerWithBackend(burner.address, burner.privateKey).catch(() => {});
       }
 
       // Check if need to register burner in contract
