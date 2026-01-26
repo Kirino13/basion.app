@@ -25,6 +25,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const isFirstTapRef = useRef(true);
   const lastTxHashRef = useRef<string | null>(null);
   const pendingTxCountRef = useRef(0);
+  const boostSyncedRef = useRef(false);
 
   const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
@@ -209,6 +210,26 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
       // Update local taps immediately for responsive UI
       setLocalTaps(prev => Math.max(0, prev - 1));
+
+      // Sync boost to contract on first tap (fire and forget - don't block UI)
+      if (!boostSyncedRef.current && address) {
+        boostSyncedRef.current = true;
+        fetch('/api/sync-boost', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ wallet: address }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.synced) {
+              console.log('Boost synced:', data.message);
+            }
+          })
+          .catch(() => {
+            // Reset flag on error so we try again next tap
+            boostSyncedRef.current = false;
+          });
+      }
 
       // Fire and forget - send transaction without blocking
       sendTap()
