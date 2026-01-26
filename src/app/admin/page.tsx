@@ -60,6 +60,7 @@ export default function AdminPage() {
   const [totalDepositUsd, setTotalDepositUsd] = useState(0);
   const [totalCommission, setTotalCommission] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
+  const [totalTaps, setTotalTaps] = useState(0);
   const [bannedCount, setBannedCount] = useState(0);
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
@@ -126,11 +127,13 @@ export default function AdminPage() {
       const depositTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.total_deposit_usd || 0), 0);
       const commissionTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.commission_points || 0), 0);
       const pointsTotal = usersData.reduce((sum: number, u: UserData) => sum + (Number(u.total_points) || 0), 0);
+      const tapsTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.taps_remaining || 0), 0);
       const banned = usersData.filter((u: UserData) => u.is_banned).length;
       
       setTotalDepositUsd(depositTotal);
       setTotalCommission(commissionTotal);
       setTotalPoints(pointsTotal);
+      setTotalTaps(tapsTotal);
       setBannedCount(banned);
     } catch (error) {
       console.error('Failed to fetch data:', error);
@@ -494,10 +497,10 @@ export default function AdminPage() {
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
-              <ArrowDownToLine className="w-5 h-5 text-purple-400" />
-              <span className="text-white/60">Pending</span>
+              <Zap className="w-5 h-5 text-purple-400" />
+              <span className="text-white/60">Total Taps</span>
             </div>
-            <p className="text-3xl font-bold text-white">{burners.filter((b) => !b.withdrawn).length}</p>
+            <p className="text-3xl font-bold text-white">{totalTaps.toLocaleString()}</p>
           </div>
         </div>
 
