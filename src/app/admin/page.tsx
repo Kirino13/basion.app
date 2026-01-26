@@ -125,7 +125,7 @@ export default function AdminPage() {
       // Calculate stats
       const depositTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.total_deposit_usd || 0), 0);
       const commissionTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.commission_points || 0), 0);
-      const pointsTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.total_points || 0), 0);
+      const pointsTotal = usersData.reduce((sum: number, u: UserData) => sum + (Number(u.total_points) || 0), 0);
       const banned = usersData.filter((u: UserData) => u.is_banned).length;
       
       setTotalDepositUsd(depositTotal);
@@ -455,7 +455,9 @@ export default function AdminPage() {
               <Zap className="w-5 h-5 text-orange-400" />
               <span className="text-white/60">Total Points</span>
             </div>
-            <p className="text-3xl font-bold text-white">{totalPoints.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-white">
+              {totalPoints % 1 === 0 ? totalPoints.toLocaleString() : totalPoints.toFixed(1)}
+            </p>
           </div>
 
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
@@ -607,7 +609,11 @@ export default function AdminPage() {
                           <span className="text-white/40 text-xs ml-1">({user.deposit_count}x)</span>
                         )}
                       </td>
-                      <td className="py-3 text-white">{(user.total_points || 0).toLocaleString()}</td>
+                      <td className="py-3 text-white">
+                        {(user.total_points || 0) % 1 === 0 
+                          ? (user.total_points || 0).toLocaleString() 
+                          : (user.total_points || 0).toFixed(1)}
+                      </td>
                       <td className="py-3 text-yellow-400">{(user.commission_points || 0).toFixed(1)}</td>
                       <td className="py-3 text-purple-400">{user.boost_percent || 0}%</td>
                       <td className="py-3 text-white">{(user.taps_remaining || 0).toLocaleString()}</td>

@@ -28,11 +28,11 @@ export async function GET(request: Request) {
       throw error;
     }
 
-    // Format response with ranks
+    // Format response with ranks - ensure points are numbers for decimal display
     const leaderboard = (data || []).map((user, index) => ({
       rank: index + 1,
       wallet: user.main_wallet,
-      points: user.total_points || 0,
+      points: Number(user.total_points) || 0, // Ensure number type for decimals
     }));
 
     return NextResponse.json(leaderboard);

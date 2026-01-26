@@ -58,7 +58,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
             }}
           />
           
-          {/* +1 Text */}
+          {/* Points Text - shows decimal for boosted values (e.g., +1.3) */}
           <span 
             className="relative z-10 font-black text-lg select-none"
             style={{
@@ -66,7 +66,7 @@ const FloatingBubble: React.FC<FloatingBubbleProps> = ({ data, onComplete }) => 
               textShadow: '0 1px 2px rgba(0,0,0,0.3), 0 0 8px rgba(0,229,255,0.6)',
             }}
           >
-            +{data.value}
+            +{data.value % 1 === 0 ? data.value : data.value.toFixed(1)}
           </span>
         </div>
 

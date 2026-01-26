@@ -5,27 +5,17 @@ import { parseEther } from 'viem';
 import { CONTRACT_ADDRESS, GAME_CONFIG } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
+/**
+ * Hook for interacting with the Basion smart contract.
+ * 
+ * NOTE: Points are now stored OFF-CHAIN in the database with decimal support.
+ * Use useUserPoints() hook to get points data.
+ * This hook only handles: taps, deposits, and burner registration.
+ */
 export function useBasionContract() {
   const { address } = useAccount();
 
-  // Read points (premium, standard, total)
-  const {
-    data: pointsData,
-    refetch: refetchPoints,
-    isLoading: isLoadingPoints,
-  } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: BASION_ABI,
-    functionName: 'getPoints',
-    args: address ? [address] : undefined,
-    query: { 
-      enabled: !!address,
-      staleTime: 0, // Always fetch fresh data
-      gcTime: 0, // Don't cache
-    },
-  });
-
-  // Read user info (taps, multiplier, burner)
+  // Read user info (taps, multiplier, burner) - this is the main data from contract
   const {
     data: userInfo,
     refetch: refetchUserInfo,
@@ -84,15 +74,7 @@ export function useBasionContract() {
     });
   };
 
-  // Parse points data
-  const premiumPoints = pointsData ? Number(pointsData[0]) : 0;
-  const standardPoints = pointsData ? Number(pointsData[1]) : 0;
-  const totalPoints = pointsData ? Number(pointsData[2]) : 0;
-  
-  // For backward compatibility, 'points' returns totalPoints
-  const points = totalPoints;
-
-  // Parse user info
+  // Parse user info (taps and burner from contract)
   const tapBalance = userInfo ? Number(userInfo[0]) : 0;
   const pointsMultiplier = userInfo ? Number(userInfo[1]) : 100;
   const burner = userInfo ? (userInfo[2] as string) : '';
@@ -101,11 +83,9 @@ export function useBasionContract() {
   const referrer = referralInfo ? (referralInfo[0] as string) : '';
   const isBatchMode = referralInfo ? (referralInfo[1] as boolean) : false;
 
-  // Refetch all data (async) - immediate fetch with optional delayed retry
+  // Refetch contract data (taps only - points are in DB now)
   const refetchGameStats = async (): Promise<void> => {
-    // First immediate fetch
     await Promise.all([
-      refetchPoints(),
       refetchUserInfo(),
       refetchReferralInfo(),
     ]);
@@ -113,7 +93,6 @@ export function useBasionContract() {
     // Schedule a delayed refetch to catch any propagation delays
     setTimeout(async () => {
       await Promise.all([
-        refetchPoints(),
         refetchUserInfo(),
         refetchReferralInfo(),
       ]);
@@ -127,13 +106,7 @@ export function useBasionContract() {
     address,
     isConnected: !!address,
 
-    // Points
-    premiumPoints,
-    standardPoints,
-    totalPoints,
-    points, // Backward compatibility
-
-    // User info
+    // User info from contract (taps only)
     tapBalance,
     pointsMultiplier,
     burner,
@@ -143,7 +116,7 @@ export function useBasionContract() {
     referrer,
 
     // Loading states
-    isLoadingGameStats: isLoadingPoints || isLoadingUserInfo,
+    isLoadingGameStats: isLoadingUserInfo,
 
     // Write functions
     deposit,

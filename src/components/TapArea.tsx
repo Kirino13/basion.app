@@ -2,7 +2,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { useBurnerWallet, useTapThrottle, useBasionContract } from '@/hooks';
+import { useBurnerWallet, useTapThrottle, useBasionContract, useUserPoints } from '@/hooks';
 import { FloatingText } from '@/types';
 import FloatingBubble from './FloatingBubble';
 
@@ -31,13 +31,15 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const { canTap, recordTap, completeTap } = useTapThrottle();
   const { 
     tapBalance, 
-    points, 
-    premiumPoints,
-    standardPoints,
     isConnected, 
     address, 
     refetchGameStats 
   } = useBasionContract();
+  const { 
+    boostPercent, 
+    pointsPerTap, 
+    refetchPoints 
+  } = useUserPoints();
 
   // Check if user is banned
   useEffect(() => {
@@ -60,6 +62,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   }, [tapBalance]);
 
   // Debounced sync with Supabase (max once per 5 sec)
+  // Points are now calculated server-side with boost
   const debouncedSync = useCallback(async (txHash?: string) => {
     if (!address || pendingSyncRef.current) return;
     
@@ -70,27 +73,30 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     pendingSyncRef.current = true;
     
     try {
-      await refetchGameStats();
-      
-      // Sync to Supabase with txHash authentication
-      await fetch('/api/sync-user', {
+      // Sync to Supabase - server calculates points with boost
+      const response = await fetch('/api/sync-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mainWallet: address,
-          points: points,
-          premiumPoints: premiumPoints,
-          standardPoints: standardPoints,
-          tapBalance: tapBalance,
           txHash: hashToUse,
+          tapCount: 1,
         }),
       });
+      
+      if (response.ok) {
+        // Refetch points from DB to update UI
+        await refetchPoints();
+      }
+      
+      // Also refetch taps from contract
+      await refetchGameStats();
     } catch (err) {
       console.error('Sync error:', err);
     } finally {
       pendingSyncRef.current = false;
     }
-  }, [address, refetchGameStats, points, premiumPoints, standardPoints, tapBalance]);
+  }, [address, refetchGameStats, refetchPoints]);
 
   // Schedule sync (with 5 sec debounce)
   const scheduleSync = useCallback((txHash?: string) => {
@@ -111,32 +117,14 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     }
   }, [address, hasSynced, tapBalance]);
 
-  // Cleanup timer on unmount and sync on page unload
+  // Cleanup timer on unmount
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden' && address && lastTxHashRef.current) {
-        // Use sendBeacon with last txHash for authentication
-        const data = JSON.stringify({
-          mainWallet: address,
-          points: points,
-          premiumPoints: premiumPoints,
-          standardPoints: standardPoints,
-          tapBalance: localTaps,
-          txHash: lastTxHashRef.current,
-        });
-        navigator.sendBeacon('/api/sync-user', new Blob([data], { type: 'application/json' }));
-      }
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
     };
-  }, [address, points, premiumPoints, standardPoints, localTaps]);
+  }, []);
 
   // Auto-clear error after 3 seconds
   useEffect(() => {
@@ -199,12 +187,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Increment pending counter
       pendingTxCountRef.current++;
 
-      // Create bubble animation (instant visual feedback)
+      // Create bubble animation (instant visual feedback with boost)
+      // pointsPerTap = 1 × (1 + boostPercent/100), e.g., 30% boost = 1.3
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
         y: clientY,
-        value: 1,
+        value: pointsPerTap,
       };
       setBubbles((prev) => [...prev, newBubble]);
 
@@ -245,8 +234,33 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           pendingTxCountRef.current = Math.max(0, pendingTxCountRef.current - 1);
           completeTap();
           
-          // Fetch updated stats from contract immediately
+          // Fetch updated taps from contract
           await refetchGameStats();
+          
+          // IMPORTANT: Sync points to DB FIRST (this calculates points with boost)
+          if (address) {
+            try {
+              const syncRes = await fetch('/api/sync-user', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mainWallet: address,
+                  txHash: txHash,
+                  tapCount: 1,
+                }),
+              });
+              
+              if (syncRes.ok) {
+                const syncData = await syncRes.json();
+                console.log('Points synced:', syncData.pointsEarned, 'with boost:', syncData.boostPercent + '%');
+              }
+            } catch (syncErr) {
+              console.error('Sync error:', syncErr);
+            }
+          }
+          
+          // NOW fetch updated points from DB (after sync)
+          await refetchPoints();
           
           // Call success callback
           if (onTapSuccess) {
@@ -281,9 +295,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
               })
               .catch(() => {});
           }
-
-          // Schedule sync
-          scheduleSync(txHash);
         })
         .catch((err) => {
           console.error('Tap error:', err);
@@ -308,7 +319,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           }
         });
     },
-    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
+    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed, pointsPerTap]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;

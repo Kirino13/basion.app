@@ -227,27 +227,48 @@ export async function POST(request: Request) {
       console.warn('Transaction sent but confirmation wait failed');
     }
 
-    // Get updated points from contract
-    let syncedPoints = { premium: 0, standard: 0, tapBalance: 0, totalPoints: 0 };
+    // Calculate points with boost (off-chain decimal points)
+    const boostPercent = userData?.boost_percent || 0;
+    const pointsPerTap = 1 * (1 + boostPercent / 100); // e.g., 30% boost = 1.3 points
+    const pointsEarned = pointsPerTap * tapCount;
+
+    // Get current points from database and add new points
+    let syncedPoints = { premium: 0, standard: 0, tapBalance: 0, totalPoints: 0, pointsEarned };
     try {
+      // Read current points from DB
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('premium_points, standard_points, total_points')
+        .eq('main_wallet', normalizedWallet)
+        .single();
+
+      const currentPremium = Number(currentUser?.premium_points) || 0;
+      const currentStandard = Number(currentUser?.standard_points) || 0;
+      
+      // Add new points (premium for single taps, standard for batch)
+      const newPremium = tapCount === 1 ? currentPremium + pointsEarned : currentPremium;
+      const newStandard = tapCount > 1 ? currentStandard + pointsEarned : currentStandard;
+      const newTotal = newPremium + newStandard;
+
+      // Get tap balance from contract
       const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
-      const [premium, standard] = await contractRead.getPoints(wallet);
       const newTapBalance = await contractRead.tapBalance(wallet);
 
       syncedPoints = {
-        premium: Number(premium),
-        standard: Number(standard),
+        premium: newPremium,
+        standard: newStandard,
         tapBalance: Number(newTapBalance),
-        totalPoints: Number(premium) + Number(standard),
+        totalPoints: newTotal,
+        pointsEarned,
       };
 
-      // Update database
+      // Update database with new points
       await supabase.from('users').upsert(
         {
           main_wallet: normalizedWallet,
-          premium_points: Number(premium),
-          standard_points: Number(standard),
-          total_points: Number(premium) + Number(standard),
+          premium_points: newPremium,
+          standard_points: newStandard,
+          total_points: newTotal,
           taps_remaining: Number(newTapBalance),
           last_tap_at: new Date().toISOString(),
         },
@@ -295,6 +316,8 @@ export async function POST(request: Request) {
       count: tapCount,
       burnerAddress: burnerData.burner_wallet,
       points: syncedPoints,
+      pointsEarned: syncedPoints.pointsEarned,
+      boostPercent,
     });
 
   } catch (error) {

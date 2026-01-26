@@ -71,16 +71,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ addr
       return NextResponse.json(defaultResponse);
     }
 
+    // Parse points as numbers to ensure decimals work correctly
+    const premiumPoints = Number(data.premium_points) || 0;
+    const standardPoints = Number(data.standard_points) || 0;
+    const totalPoints = Number(data.total_points) || 0;
+    const boostPercent = Number(data.boost_percent) || 0;
+
     return NextResponse.json({
       mainWallet: data.main_wallet,
       burnerWallet: data.burner_wallet,
       tapsRemaining: data.taps_remaining || 0,
-      premiumPoints: data.premium_points || 0,
-      standardPoints: data.standard_points || 0,
-      totalPoints: data.total_points || 0,
+      premiumPoints,
+      standardPoints,
+      totalPoints,
+      boostPercent,
       pointsMultiplier: data.points_multiplier || 100,
       referrer: data.referrer_address,
       isBlacklisted: data.is_blacklisted || false,
+      isBanned: data.is_banned || false,
       airdropClaimed: data.airdrop_claimed || false,
     });
   } catch (error) {

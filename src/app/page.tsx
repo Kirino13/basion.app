@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, Check, CircleDollarSign, Zap, Rocket, Send } from 'lucide-react';
 import { useAccount } from 'wagmi';
 import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
-import { useBasionContract, useReferral } from '@/hooks';
+import { useBasionContract, useReferral, useUserPoints } from '@/hooks';
 
 function HomeContent() {
   const { address, isConnected } = useAccount();
-  const { tapBalance, points, refetchGameStats } = useBasionContract();
+  const { tapBalance, refetchGameStats } = useBasionContract();
+  const { points, refetchPoints } = useUserPoints();
   const { generateReferralLink } = useReferral();
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -74,15 +75,17 @@ function HomeContent() {
   };
 
   // Refetch stats when tap succeeds (blockchain confirmed)
-  const handleTapSuccess = useCallback(() => {
-    refetchGameStats();
-  }, [refetchGameStats]);
+  const handleTapSuccess = useCallback(async () => {
+    await refetchGameStats(); // Refetch taps from contract
+    await refetchPoints(); // Refetch points from DB
+  }, [refetchGameStats, refetchPoints]);
 
   // Called when deposit is successful
   const handleDepositSuccess = useCallback(async () => {
     // Refetch to ensure UI updates
     await refetchGameStats();
-  }, [refetchGameStats]);
+    await refetchPoints();
+  }, [refetchGameStats, refetchPoints]);
 
   const handleInvite = async () => {
     if (!address) return;
@@ -259,9 +262,11 @@ function HomeContent() {
         <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 lg:py-8 lg:pr-8 lg:pl-0 min-h-0 mx-auto lg:mx-0">
           {/* Top Row */}
           <div className="grid grid-cols-2 gap-4 mt-2 mb-6 w-full">
-            {/* Points Badge */}
+            {/* Points Badge - shows decimal points from DB */}
             <div className="bg-green-500 rounded-xl py-3 flex flex-col justify-center items-center shadow-lg shadow-green-500/30">
-              <span className="text-lg font-bold text-white tracking-wide">{points.toLocaleString()} pts</span>
+              <span className="text-lg font-bold text-white tracking-wide">
+                {points % 1 === 0 ? points.toLocaleString() : points.toFixed(1)} pts
+              </span>
             </div>
 
             {/* Connect Wallet */}
