@@ -80,8 +80,8 @@ function HomeContent() {
 
   // Called when deposit is successful
   const handleDepositSuccess = useCallback(async () => {
-    // Refetch with retries to ensure UI updates
-    await refetchGameStats(3, 1000);
+    // Refetch to ensure UI updates
+    await refetchGameStats();
   }, [refetchGameStats]);
 
   const handleInvite = async () => {
