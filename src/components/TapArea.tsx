@@ -37,7 +37,6 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   } = useBasionContract();
   const { 
     boostPercent, 
-    pointsPerTap, 
     refetchPoints 
   } = useUserPoints();
 
@@ -187,13 +186,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Increment pending counter
       pendingTxCountRef.current++;
 
-      // Create bubble animation (instant visual feedback with boost)
-      // pointsPerTap = 1 × (1 + boostPercent/100), e.g., 30% boost = 1.3
+      // Create bubble animation (visual +1 always, boost applied server-side)
       const newBubble: FloatingText = {
         id: Date.now() + Math.random(),
         x: clientX,
         y: clientY,
-        value: pointsPerTap,
+        value: 1,
       };
       setBubbles((prev) => [...prev, newBubble]);
 
@@ -319,7 +317,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           }
         });
     },
-    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed, pointsPerTap]
+    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
   const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
