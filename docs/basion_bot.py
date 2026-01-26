@@ -35,8 +35,8 @@ CHAIN_ID = 8453
 
 # Package options: {package_id: (usd_price, taps, eth_price)}
 PACKAGES = {
-    0: (3, 5000, 0.001),      # $3 = 5000 taps = 0.001 ETH
-    1: (10, 20000, 0.003),    # $10 = 20000 taps = 0.003 ETH
+    0: (3, 2000, 0.001),      # $3 = 2000 taps = 0.001 ETH
+    1: (10, 7000, 0.003),     # $10 = 7000 taps = 0.003 ETH
 }
 
 # Contract ABI (minimal - only functions we need)
@@ -522,7 +522,7 @@ class BasionBot:
         Deposit ETH to buy taps.
         
         Args:
-            package_id: 0 = 5000 taps ($3), 1 = 20000 taps ($10)
+            package_id: 0 = 2000 taps ($3), 1 = 7000 taps ($10)
             referrer: Optional referrer address
         
         Returns:

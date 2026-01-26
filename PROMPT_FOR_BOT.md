@@ -88,10 +88,14 @@ RPC: https://mainnet.base.org
 
 Функции контракта:
 - registerBurner(address burner) - регистрация burner, value=0
-- deposit(uint8 packageId, address referrer) - депозит, value=0.003 ETH
+- deposit(uint8 packageId, address referrer) - депозит
+
+Пакеты:
+- packageId = 0: $3 = 2000 taps, value = 0.001 ETH
+- packageId = 1: $10 = 7000 taps, value = 0.003 ETH
 
 Параметры для deposit:
-- packageId = 1 (20000 taps за $10)
+- packageId = 1 (7000 taps за $10)
 - referrer = 0x0000000000000000000000000000000000000000
 - value = 0.003 ETH
 
@@ -122,7 +126,7 @@ httpx[socks]>=0.25.0
 
 [HH:MM:SS] [0x52a...] TAP ok | pts: 4580 | taps: 15419
 [HH:MM:SS] [0x52a...] Out of taps! Depositing $10...
-[HH:MM:SS] [0x52a...] Deposited! +20000 taps
+[HH:MM:SS] [0x52a...] Deposited! +7000 taps
 
 ## Важно
 
