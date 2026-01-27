@@ -79,17 +79,50 @@ export async function POST(request: Request) {
       .eq('main_wallet', normalizedUser)
       .single();
 
-    // If no referrer or bonus already claimed
-    if (!userData?.referred_by || userData?.referral_bonus_claimed) {
+    // If bonus already claimed, return early
+    if (userData?.referral_bonus_claimed) {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'Bonus already claimed',
+        bonusApplied: false 
+      });
+    }
+
+    let referrerWallet = userData?.referred_by;
+    const currentUserBoost = userData?.boost_percent || 0;
+
+    // Fallback: if no referrer in DB, try to get from contract
+    if (!referrerWallet) {
+      try {
+        const provider = new ethers.JsonRpcProvider(RPC_URL);
+        const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+        const userInfo = await contract.userInfo(userWallet);
+        const contractReferrer = userInfo.referrer?.toLowerCase();
+        
+        if (contractReferrer && contractReferrer !== '0x0000000000000000000000000000000000000000') {
+          referrerWallet = contractReferrer;
+          
+          // Save referrer to database for future use
+          await supabase.from('users').upsert({
+            main_wallet: normalizedUser,
+            referred_by: contractReferrer,
+          }, { onConflict: 'main_wallet' });
+          
+          console.log(`Referrer recovered from contract: ${normalizedUser} -> ${contractReferrer}`);
+        }
+      } catch (contractError) {
+        console.warn('Failed to get referrer from contract:', contractError);
+      }
+    }
+
+    // If still no referrer, no bonus to claim
+    if (!referrerWallet) {
       return NextResponse.json({ 
         success: true, 
         message: 'No bonus to claim',
         bonusApplied: false 
       });
     }
-
-    const referrerWallet = userData.referred_by;
-    const currentUserBoost = userData.boost_percent || 0;
 
     // Apply +10% boost to referred user
     const newUserBoost = currentUserBoost + REFERRAL_BONUS;
