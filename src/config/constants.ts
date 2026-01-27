@@ -8,6 +8,9 @@ export const ADMIN_WALLET = (process.env.NEXT_PUBLIC_ADMIN_WALLET || '0x52a3435A
 // Gas limit for taps - block taps when gas is above this threshold (in gwei)
 export const MAX_GAS_GWEI = 0.005;
 
+// Maintenance mode - set MAINTENANCE_MODE=true in env to block all taps
+export const MAINTENANCE_MODE = process.env.MAINTENANCE_MODE === 'true';
+
 export const GAME_CONFIG = {
   // Package IDs match contract array indices (0 and 1)
   packages: {

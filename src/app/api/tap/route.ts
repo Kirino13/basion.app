@@ -4,7 +4,7 @@ import { verifyMessage } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
 import { isGasTooHigh } from '@/lib/gasPrice';
-import { CONTRACT_ADDRESS, RPC_URL, COMMISSION_WALLETS as RAW_WALLETS, COMMISSION_PERCENT } from '@/config/constants';
+import { CONTRACT_ADDRESS, RPC_URL, COMMISSION_WALLETS as RAW_WALLETS, COMMISSION_PERCENT, MAINTENANCE_MODE } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
 // Normalize commission wallets to lowercase
@@ -27,6 +27,14 @@ const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
  */
 export async function POST(request: Request) {
   try {
+    // Check maintenance mode first
+    if (MAINTENANCE_MODE) {
+      return NextResponse.json(
+        { success: false, error: 'Service is under maintenance. Please try again later.' },
+        { status: 503 }
+      );
+    }
+
     const body = await request.json();
     const { wallet, signature, timestamp, count = 1 } = body;
 
