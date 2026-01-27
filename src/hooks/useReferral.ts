@@ -4,6 +4,34 @@ import { useEffect, useState, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { STORAGE_KEYS } from '@/config/constants';
 
+// Safe localStorage helpers (handle private browsing mode, etc.)
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): boolean => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      console.warn('localStorage.setItem failed (private mode?)');
+      return false;
+    }
+  },
+  removeItem: (key: string): boolean => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
 export function useReferral() {
   const searchParams = useSearchParams();
   const [storedReferrer, setStoredReferrer] = useState<string | null>(null);
@@ -15,13 +43,13 @@ export function useReferral() {
     // Check URL params
     const refParam = searchParams.get('ref');
     if (refParam && refParam.startsWith('0x') && refParam.length === 42) {
-      localStorage.setItem(STORAGE_KEYS.referrer, refParam);
+      safeLocalStorage.setItem(STORAGE_KEYS.referrer, refParam);
       setStoredReferrer(refParam);
       return;
     }
 
     // Check localStorage for existing referrer
-    const stored = localStorage.getItem(STORAGE_KEYS.referrer);
+    const stored = safeLocalStorage.getItem(STORAGE_KEYS.referrer);
     if (stored) {
       setStoredReferrer(stored);
     }
@@ -30,13 +58,13 @@ export function useReferral() {
   // Get referrer address
   const getReferrer = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem(STORAGE_KEYS.referrer);
+    return safeLocalStorage.getItem(STORAGE_KEYS.referrer);
   }, []);
 
   // Clear referrer (after it's been set on chain)
   const clearReferrer = useCallback((): void => {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem(STORAGE_KEYS.referrer);
+    safeLocalStorage.removeItem(STORAGE_KEYS.referrer);
     setStoredReferrer(null);
   }, []);
 

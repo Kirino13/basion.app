@@ -47,14 +47,20 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   useEffect(() => {
     if (address) {
       fetch(`/api/admin/ban?wallet=${address}`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) {
+            console.warn('Failed to check ban status:', res.status);
+            return null;
+          }
+          return res.json();
+        })
         .then(data => {
-          if (data.isBanned) {
+          if (data?.isBanned) {
             setIsBanned(true);
             setError('Your wallet is banned');
           }
         })
-        .catch(() => {});
+        .catch(err => console.warn('Network error checking ban status:', err));
     }
   }, [address]);
 
@@ -284,7 +290,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
                 fromWallet: address,
                 txHash: txHash,
               }),
-            }).catch(() => {});
+            })
+              .then(res => {
+                if (!res.ok) console.warn('Failed to send commission:', res.status);
+              })
+              .catch(err => console.warn('Network error sending commission:', err));
           }
 
           // Claim referral bonus on first tap
@@ -295,13 +305,20 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userWallet: address }),
             })
-              .then(res => res.json())
+              .then(res => {
+                if (!res.ok) {
+                  console.warn('Failed to claim referral bonus:', res.status);
+                  return null;
+                }
+                return res.json();
+              })
               .then(data => {
-                if (data.bonusApplied) {
+                if (data?.bonusApplied) {
                   setReferralBonusClaimed(true);
+                  console.log('Referral bonus applied:', data.userBoost + '%');
                 }
               })
-              .catch(() => {});
+              .catch(err => console.warn('Network error claiming referral bonus:', err));
           }
         })
         .catch((err) => {

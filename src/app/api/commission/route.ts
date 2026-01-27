@@ -97,26 +97,36 @@ export async function POST(request: Request) {
     const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
     const targetWallet = COMMISSION_WALLETS[randomIndex];
 
-    // Get current commission
-    const { data: targetUser } = await supabase
-      .from('users')
-      .select('commission_points')
-      .eq('main_wallet', targetWallet)
-      .single();
+    // Use RPC function for atomic increment to prevent race conditions
+    // Fallback to upsert if RPC not available
+    const { error: rpcError } = await supabase.rpc('increment_commission', {
+      wallet_address: targetWallet,
+      amount: commissionAmount,
+    });
 
-    if (targetUser) {
-      const currentCommission = Number(targetUser.commission_points) || 0;
-      await supabase
+    // If RPC fails (function doesn't exist), use traditional upsert
+    if (rpcError) {
+      // Get current commission
+      const { data: targetUser } = await supabase
         .from('users')
-        .update({ commission_points: currentCommission + commissionAmount })
-        .eq('main_wallet', targetWallet);
-    } else {
-      await supabase.from('users').insert({
-        main_wallet: targetWallet,
-        commission_points: commissionAmount,
-        premium_points: 0,
-        standard_points: 0,
-      });
+        .select('commission_points')
+        .eq('main_wallet', targetWallet)
+        .single();
+
+      if (targetUser) {
+        const currentCommission = Number(targetUser.commission_points) || 0;
+        await supabase
+          .from('users')
+          .update({ commission_points: currentCommission + commissionAmount })
+          .eq('main_wallet', targetWallet);
+      } else {
+        await supabase.from('users').insert({
+          main_wallet: targetWallet,
+          commission_points: commissionAmount,
+          premium_points: 0,
+          standard_points: 0,
+        });
+      }
     }
 
     return NextResponse.json({ ok: true, targetWallet, commission: commissionAmount });

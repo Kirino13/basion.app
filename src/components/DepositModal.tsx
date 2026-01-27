@@ -104,7 +104,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
               referrerWallet: referrer,
               txHash: txHash,
             }),
-          }).catch(() => {});
+          })
+            .then(res => {
+              if (!res.ok) console.warn('Failed to register referral:', res.status);
+            })
+            .catch(err => console.warn('Network error registering referral:', err));
         }
         
         // Track deposit in USD using txHash for authentication
@@ -118,7 +122,11 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
               usdAmount,
               txHash: txHash,
             }),
-          }).catch(() => {});
+          })
+            .then(res => {
+              if (!res.ok) console.warn('Failed to sync deposit:', res.status);
+            })
+            .catch(err => console.warn('Network error syncing deposit:', err));
         }
         
         // Notify parent component about successful deposit
@@ -191,7 +199,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         
         // ALWAYS register existing burner with backend (in case it's not registered yet)
         // This handles cases where localStorage exists but backend doesn't have the record
-        registerBurnerWithBackend(burner.address, burner.privateKey).catch(() => {});
+        registerBurnerWithBackend(burner.address, burner.privateKey)
+          .catch(err => console.warn('Failed to register burner with backend:', err));
       }
 
       // Check if need to register burner in contract

@@ -27,8 +27,8 @@ export function useUserPoints() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch points from API
-  const fetchPoints = useCallback(async () => {
+  // Fetch points from API with abort controller support
+  const fetchPoints = useCallback(async (signal?: AbortSignal) => {
     if (!address) {
       setData({
         totalPoints: 0,
@@ -44,31 +44,42 @@ export function useUserPoints() {
     setError(null);
 
     try {
-      const response = await fetch(`/api/user/${address}`);
+      const response = await fetch(`/api/user/${address}`, { signal });
       if (!response.ok) {
         throw new Error('Failed to fetch user data');
       }
 
       const userData = await response.json();
       
-      setData({
-        totalPoints: Number(userData.totalPoints) || 0,
-        premiumPoints: Number(userData.premiumPoints) || 0,
-        standardPoints: Number(userData.standardPoints) || 0,
-        boostPercent: Number(userData.boostPercent) || 0,
-        tapsRemaining: Number(userData.tapsRemaining) || 0,
-      });
+      // Only update state if not aborted
+      if (!signal?.aborted) {
+        setData({
+          totalPoints: Number(userData.totalPoints) || 0,
+          premiumPoints: Number(userData.premiumPoints) || 0,
+          standardPoints: Number(userData.standardPoints) || 0,
+          boostPercent: Number(userData.boostPercent) || 0,
+          tapsRemaining: Number(userData.tapsRemaining) || 0,
+        });
+      }
     } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') return;
       console.error('Error fetching user points:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      if (!signal?.aborted) {
+        setError(err instanceof Error ? err.message : 'Unknown error');
+      }
     } finally {
-      setIsLoading(false);
+      if (!signal?.aborted) {
+        setIsLoading(false);
+      }
     }
   }, [address]);
 
-  // Initial fetch when address changes
+  // Initial fetch when address changes with cleanup
   useEffect(() => {
-    fetchPoints();
+    const abortController = new AbortController();
+    fetchPoints(abortController.signal);
+    return () => abortController.abort();
   }, [fetchPoints]);
 
   // Refetch function for external use (e.g., after a tap)

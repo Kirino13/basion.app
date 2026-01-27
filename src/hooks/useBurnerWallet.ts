@@ -6,6 +6,34 @@ import { useAccount, useSignMessage } from 'wagmi';
 import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
+// Safe localStorage helpers (handle private browsing mode, etc.)
+const safeLocalStorage = {
+  getItem: (key: string): string | null => {
+    try {
+      return localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem: (key: string, value: string): boolean => {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch {
+      console.warn('localStorage.setItem failed (private mode?)');
+      return false;
+    }
+  },
+  removeItem: (key: string): boolean => {
+    try {
+      localStorage.removeItem(key);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+};
+
 // Cached provider - created once
 let cachedProvider: ethers.JsonRpcProvider | null = null;
 function getProvider(): ethers.JsonRpcProvider {
@@ -76,8 +104,8 @@ export function useBurnerWallet() {
     const keys = getStorageKeys(mainWallet);
     
     // Check localStorage first
-    const localKey = localStorage.getItem(keys.burnerKey);
-    const localAddress = localStorage.getItem(keys.burnerAddress);
+    const localKey = safeLocalStorage.getItem(keys.burnerKey);
+    const localAddress = safeLocalStorage.getItem(keys.burnerAddress);
     
     if (localKey && localAddress) {
       // Burner exists locally
@@ -146,13 +174,13 @@ export function useBurnerWallet() {
       // Otherwise, user needs to create a new burner (via new deposit)
       
       // Check if we have the key locally
-      const localKey = localStorage.getItem(keys.burnerKey);
+      const localKey = safeLocalStorage.getItem(keys.burnerKey);
       if (localKey) {
         // Validate the local key matches the backend address
         try {
           const wallet_obj = new ethers.Wallet(localKey);
           if (wallet_obj.address.toLowerCase() === data.burnerAddress.toLowerCase()) {
-            localStorage.setItem(keys.burnerAddress, data.burnerAddress);
+            safeLocalStorage.setItem(keys.burnerAddress, data.burnerAddress);
             return {
               address: data.burnerAddress,
               privateKey: localKey,
@@ -160,8 +188,8 @@ export function useBurnerWallet() {
           }
         } catch {
           // Invalid local key, clear it
-          localStorage.removeItem(keys.burnerKey);
-          localStorage.removeItem(keys.burnerAddress);
+          safeLocalStorage.removeItem(keys.burnerKey);
+          safeLocalStorage.removeItem(keys.burnerAddress);
         }
       }
       
@@ -188,8 +216,8 @@ export function useBurnerWallet() {
     const keys = getStorageKeys(mainWallet);
 
     // Save to wallet-specific localStorage keys
-    localStorage.setItem(keys.burnerKey, wallet.privateKey);
-    localStorage.setItem(keys.burnerAddress, wallet.address);
+    safeLocalStorage.setItem(keys.burnerKey, wallet.privateKey);
+    safeLocalStorage.setItem(keys.burnerAddress, wallet.address);
 
     setBurnerAddress(wallet.address);
     setHasBurner(true);
@@ -210,8 +238,8 @@ export function useBurnerWallet() {
     if (!mainWallet) return null;
 
     const keys = getStorageKeys(mainWallet);
-    const privateKey = localStorage.getItem(keys.burnerKey);
-    const address = localStorage.getItem(keys.burnerAddress);
+    const privateKey = safeLocalStorage.getItem(keys.burnerKey);
+    const address = safeLocalStorage.getItem(keys.burnerAddress);
     if (!privateKey || !address) return null;
 
     // Return stored data directly - validation happens when wallet is created in sendTap
@@ -227,7 +255,7 @@ export function useBurnerWallet() {
     if (!mainWallet) return null;
     
     const keys = getStorageKeys(mainWallet);
-    return localStorage.getItem(keys.burnerAddress);
+    return safeLocalStorage.getItem(keys.burnerAddress);
   }, [mainWallet]);
 
   // Clear burner wallet for current mainWallet
@@ -236,8 +264,8 @@ export function useBurnerWallet() {
     if (!mainWallet) return;
 
     const keys = getStorageKeys(mainWallet);
-    localStorage.removeItem(keys.burnerKey);
-    localStorage.removeItem(keys.burnerAddress);
+    safeLocalStorage.removeItem(keys.burnerKey);
+    safeLocalStorage.removeItem(keys.burnerAddress);
 
     setBurnerAddress(null);
     setHasBurner(false);

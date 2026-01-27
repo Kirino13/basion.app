@@ -32,6 +32,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing txHash' }, { status: 401 });
     }
 
+    // Validate tapCount - must be positive finite number, max 100
+    const validatedTapCount = Number(tapCount);
+    if (!Number.isFinite(validatedTapCount) || validatedTapCount <= 0 || validatedTapCount > 100) {
+      return NextResponse.json({ error: 'Invalid tapCount (must be 1-100)' }, { status: 400 });
+    }
+
+    // Validate wallet format
+    if (!/^0x[a-fA-F0-9]{40}$/.test(mainWallet)) {
+      return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
+    }
+
     const normalizedWallet = mainWallet.toLowerCase();
 
     // Check if already processed (idempotent)
@@ -109,7 +120,7 @@ export async function POST(request: Request) {
 
     // Calculate points with boost: 1 × (1 + boost/100) per tap
     const pointsPerTap = 1 * (1 + boostPercent / 100);
-    const pointsEarned = pointsPerTap * tapCount;
+    const pointsEarned = pointsPerTap * validatedTapCount;
 
     // Add to premium points (single tap mode from UI)
     const newPremium = currentPremium + pointsEarned;

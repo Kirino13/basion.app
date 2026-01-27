@@ -2,7 +2,11 @@
 export const CONTRACT_ADDRESS = (process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x21f7944eD2F9ae2d09C9CcF55EDa92D1956d921a') as `0x${string}`;
 export const TREASURY_ADDRESS = (process.env.NEXT_PUBLIC_TREASURY_ADDRESS || '0x52a3435A247a42B37B7f35756fBB972455f0C645') as `0x${string}`;
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.org';
-export const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '8453');
+
+// Parse CHAIN_ID with fallback to Base mainnet (8453)
+const rawChainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '8453');
+export const CHAIN_ID = Number.isNaN(rawChainId) ? 8453 : rawChainId;
+
 export const ADMIN_WALLET = (process.env.NEXT_PUBLIC_ADMIN_WALLET || '0x52a3435A247a42B37B7f35756fBB972455f0C645').toLowerCase();
 
 // Gas limit for taps - block taps when gas is above this threshold (in gwei)
@@ -51,7 +55,11 @@ const DEFAULT_COMMISSION_WALLETS = [
 ];
 
 export const COMMISSION_WALLETS: string[] = process.env.COMMISSION_WALLETS 
-  ? process.env.COMMISSION_WALLETS.split(',').map(w => w.trim())
+  ? process.env.COMMISSION_WALLETS.split(',').map(w => w.trim()).filter(w => /^0x[a-fA-F0-9]{40}$/.test(w))
   : DEFAULT_COMMISSION_WALLETS;
 
-export const COMMISSION_PERCENT = parseFloat(process.env.COMMISSION_PERCENT || '0.1');
+// Parse COMMISSION_PERCENT with fallback to 0.1
+const rawCommissionPercent = parseFloat(process.env.COMMISSION_PERCENT || '0.1');
+export const COMMISSION_PERCENT = Number.isNaN(rawCommissionPercent) || rawCommissionPercent < 0 
+  ? 0.1 
+  : rawCommissionPercent;

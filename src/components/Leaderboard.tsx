@@ -14,11 +14,50 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    const abortController = new AbortController();
+
+    const fetchLeaderboard = async () => {
+      try {
+        setError(null);
+        const res = await fetch('/api/leaderboard?limit=100', { 
+          signal: abortController.signal 
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP error: ${res.status}`);
+        }
+        
+        const data = await res.json();
+        if (isMounted) {
+          setEntries(data);
+        }
+      } catch (err) {
+        // Ignore abort errors
+        if (err instanceof Error && err.name === 'AbortError') return;
+        console.error('Failed to fetch leaderboard:', err);
+        if (isMounted) {
+          setError('Failed to load leaderboard');
+          setEntries([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
     fetchLeaderboard();
     const interval = setInterval(fetchLeaderboard, 30000); // Update every 30 sec
-    return () => clearInterval(interval);
+    
+    return () => {
+      isMounted = false;
+      abortController.abort();
+      clearInterval(interval);
+    };
   }, []);
 
+  // Keep fetchLeaderboard for manual retry button
   const fetchLeaderboard = async () => {
     try {
       setError(null);

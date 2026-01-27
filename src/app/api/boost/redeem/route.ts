@@ -48,6 +48,55 @@ const BOOST_CODES = new Map<string, number>(
   })
 );
 
+// Helper function to sync boost to contract with retry
+async function syncBoostToContractWithRetry(
+  address: string, 
+  newBoost: number, 
+  maxRetries = 3
+): Promise<boolean> {
+  if (!OWNER_PRIVATE_KEY) {
+    console.warn('OWNER_PRIVATE_KEY not set - boost not synced to contract');
+    return false;
+  }
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URL);
+      const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
+      
+      // Read current multiplier from contract to avoid race conditions
+      const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+      const currentContractMultiplier = await contractRead.pointsMultiplier(address);
+      const baseMultiplier = Number(currentContractMultiplier) || 100;
+      
+      // Convert boost percent to multiplier (20% boost = 120 multiplier)
+      const calculatedMultiplier = 100 + newBoost;
+      const newMultiplier = Math.max(baseMultiplier, calculatedMultiplier);
+      
+      // Only update if the new value is higher
+      if (newMultiplier > baseMultiplier) {
+        const tx = await contract.setBoost(address, newMultiplier, 0);
+        await tx.wait(1);
+        console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x (was ${baseMultiplier})`);
+      } else {
+        console.log(`Boost already set in contract: ${address} -> ${baseMultiplier}x`);
+      }
+      
+      return true;
+    } catch (error) {
+      console.warn(`Contract sync attempt ${attempt}/${maxRetries} failed:`, error);
+      if (attempt < maxRetries) {
+        // Wait before retry (exponential backoff: 1s, 2s, 4s)
+        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+      }
+    }
+  }
+
+  console.error(`Failed to sync boost to contract after ${maxRetries} retries: ${address}`);
+  return false;
+}
+
 // POST /api/boost/redeem
 // Body: { address: string, code: string }
 export async function POST(request: Request) {
@@ -118,41 +167,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: 'UPDATE_FAILED' }, { status: 500 });
     }
 
-    // Sync boost to smart contract if owner key is configured
-    let contractSynced = false;
-    if (OWNER_PRIVATE_KEY) {
-      try {
-        const provider = new ethers.JsonRpcProvider(RPC_URL);
-        const ownerWallet = new ethers.Wallet(OWNER_PRIVATE_KEY, provider);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, ownerWallet);
-        
-        // Read current multiplier from contract to avoid race conditions
-        const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
-        const currentContractMultiplier = await contractRead.pointsMultiplier(address);
-        const baseMultiplier = Number(currentContractMultiplier) || 100;
-        
-        // Convert boost percent to multiplier (20% boost = 120 multiplier)
-        // Use the maximum of current contract value and new calculated value
-        const calculatedMultiplier = 100 + newBoost;
-        const newMultiplier = Math.max(baseMultiplier, calculatedMultiplier);
-        
-        // Only update if the new value is higher
-        if (newMultiplier > baseMultiplier) {
-          const tx = await contract.setBoost(address, newMultiplier, 0);
-          await tx.wait(1);
-          console.log(`Boost synced to contract: ${address} -> ${newMultiplier}x (was ${baseMultiplier})`);
-        } else {
-          console.log(`Boost already set in contract: ${address} -> ${baseMultiplier}x`);
-        }
-        
-        contractSynced = true;
-      } catch (contractError) {
-        console.error('Failed to sync boost to contract:', contractError);
-        // Continue anyway - DB is updated, contract sync is best-effort
-      }
-    } else {
-      console.warn('OWNER_PRIVATE_KEY not set - boost not synced to contract');
-    }
+    // Sync boost to smart contract with retry mechanism
+    const contractSynced = await syncBoostToContractWithRetry(address, newBoost);
 
     return NextResponse.json({ 
       ok: true, 
