@@ -3,6 +3,7 @@ import { verifyMessage } from 'viem';
 import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
+import { BASION_ABI } from '@/config/abi';
 
 // Track processed txHashes to prevent duplicate deposits (in-memory)
 const processedTxHashes = new Set<string>();
@@ -114,10 +115,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to track deposit' }, { status: 500 });
     }
 
+    // Also sync tap balance from contract
+    let tapBalance = 0;
+    try {
+      const provider = new ethers.JsonRpcProvider(RPC_URL);
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
+      tapBalance = Number(await contract.tapBalance(wallet));
+      
+      // Update taps_remaining in database
+      await supabase
+        .from('users')
+        .update({ taps_remaining: tapBalance })
+        .eq('main_wallet', normalizedWallet);
+    } catch (tapErr) {
+      console.warn('Failed to sync tap balance after deposit:', tapErr);
+    }
+
     return NextResponse.json({ 
       success: true, 
       totalDepositUsd: currentTotal + usdAmount,
-      depositCount: currentCount + 1
+      depositCount: currentCount + 1,
+      tapsRemaining: tapBalance
     });
   } catch (error) {
     console.error('Sync deposit error:', error);
