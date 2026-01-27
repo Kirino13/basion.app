@@ -47,7 +47,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ addr
       mainWallet: normalizedAddress,
       tapsRemaining: 0,
       premiumPoints: 0,
-      standardPoints: 0,
       totalPoints: 0,
       boostPercent: 0,
       isBanned: false,
@@ -82,14 +81,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ addr
       burnerWallet: data.burner_wallet,
       tapsRemaining: data.taps_remaining || 0,
       premiumPoints,
-      standardPoints,
       totalPoints,
       boostPercent,
       pointsMultiplier: data.points_multiplier || 100,
       referrer: data.referrer_address,
       isBlacklisted: data.is_blacklisted || false,
       isBanned: data.is_banned || false,
-      airdropClaimed: data.airdrop_claimed || false,
     });
   } catch (error) {
     console.error('Get user error:', error);
