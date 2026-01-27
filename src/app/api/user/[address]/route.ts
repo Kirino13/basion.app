@@ -78,14 +78,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ addr
 
     return NextResponse.json({
       mainWallet: data.main_wallet,
-      burnerWallet: data.burner_wallet,
       tapsRemaining: data.taps_remaining || 0,
       premiumPoints,
       totalPoints,
       boostPercent,
       pointsMultiplier: data.points_multiplier || 100,
       referrer: data.referrer_address,
-      isBlacklisted: data.is_blacklisted || false,
       isBanned: data.is_banned || false,
     });
   } catch (error) {
