@@ -142,7 +142,7 @@ export async function POST(request: Request) {
         referral_bonus_claimed: true,
       })
       .eq('main_wallet', normalizedUser)
-      .eq('referral_bonus_claimed', false) // Only update if not already claimed (race condition protection)
+      .neq('referral_bonus_claimed', true) // Only update if not already claimed (covers NULL and false)
       .select();
 
     if (userUpdateError) {
@@ -177,8 +177,8 @@ export async function POST(request: Request) {
       const newReferrerBoost = referrerBoost + REFERRAL_BONUS;
       const newReferrerCount = referrerCount + 1;
 
-      // Use atomic increment via RPC to prevent race conditions
-      // First try to update existing user with referral_count check
+      // Update referrer with race condition protection
+      // Use .or() to handle NULL referral_count (new users) and existing users under limit
       const { data: referrerUpdated, error: referrerUpdateError } = await supabase
         .from('users')
         .update({
@@ -186,7 +186,7 @@ export async function POST(request: Request) {
           referral_count: newReferrerCount,
         })
         .eq('main_wallet', referrerWallet)
-        .lt('referral_count', MAX_REFERRALS) // Only if under limit (race condition protection)
+        .or(`referral_count.is.null,referral_count.lt.${MAX_REFERRALS}`) // Covers NULL and under limit
         .select();
 
       if (!referrerUpdateError && referrerUpdated && referrerUpdated.length > 0) {
