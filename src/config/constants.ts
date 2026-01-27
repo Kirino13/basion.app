@@ -5,6 +5,9 @@ export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || 'https://mainnet.base.
 export const CHAIN_ID = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '8453');
 export const ADMIN_WALLET = (process.env.NEXT_PUBLIC_ADMIN_WALLET || '0x52a3435A247a42B37B7f35756fBB972455f0C645').toLowerCase();
 
+// Gas limit for taps - block taps when gas is above this threshold (in gwei)
+export const MAX_GAS_GWEI = 0.005;
+
 export const GAME_CONFIG = {
   // Package IDs match contract array indices (0 and 1)
   packages: {

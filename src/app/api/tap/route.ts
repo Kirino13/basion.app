@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { verifyMessage } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
+import { isGasTooHigh } from '@/lib/gasPrice';
 import { CONTRACT_ADDRESS, RPC_URL, COMMISSION_WALLETS as RAW_WALLETS, COMMISSION_PERCENT } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
@@ -85,6 +86,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: 'Invalid signature' },
         { status: 401 }
+      );
+    }
+
+    // Check gas price - block taps when network is congested
+    const gasTooHigh = await isGasTooHigh();
+    if (gasTooHigh) {
+      return NextResponse.json(
+        { success: false, error: 'Network congested. Gas too high. Try again later.' },
+        { status: 503 }
       );
     }
 

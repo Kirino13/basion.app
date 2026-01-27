@@ -5,6 +5,8 @@ import { motion } from 'framer-motion';
 import { useBurnerWallet, useTapThrottle, useBasionContract, useUserPoints } from '@/hooks';
 import { FloatingText } from '@/types';
 import FloatingBubble from './FloatingBubble';
+import CongestionModal from './CongestionModal';
+import { isGasTooHigh } from '@/lib/gasPrice';
 
 interface TapAreaProps {
   onOpenDeposit: () => void;
@@ -18,6 +20,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [hasSynced, setHasSynced] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const [referralBonusClaimed, setReferralBonusClaimed] = useState(false);
+  const [showCongestionModal, setShowCongestionModal] = useState(false);
   
   // Ref for debounced sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -148,6 +151,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       // Check if banned
       if (isBanned) {
         setError('Your wallet is banned');
+        return;
+      }
+
+      // Check gas price - block taps when network is congested
+      const gasTooHigh = await isGasTooHigh();
+      if (gasTooHigh) {
+        setShowCongestionModal(true);
         return;
       }
 
@@ -324,6 +334,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
+      {/* Gas congestion modal */}
+      <CongestionModal 
+        isOpen={showCongestionModal} 
+        onClose={() => setShowCongestionModal(false)} 
+      />
+
       {/* Animated bubbles */}
       {bubbles.map((b) => (
         <FloatingBubble key={b.id} data={b} onComplete={removeBubble} />
