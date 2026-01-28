@@ -78,17 +78,17 @@ export async function GET(request: Request) {
       console.error('Error fetching burners:', burnersError);
     }
 
-    // Sort burners by taps_remaining from users table (descending)
+    // Sort burners by total_points from users table (descending) - same order as Users table
     let sortedBurners = burners || [];
     if (users && burners) {
-      const userTapsMap = new Map<string, number>();
+      const userPointsMap = new Map<string, number>();
       for (const user of users) {
-        userTapsMap.set(user.main_wallet, user.taps_remaining || 0);
+        userPointsMap.set(user.main_wallet, Number(user.total_points) || 0);
       }
       sortedBurners = [...burners].sort((a, b) => {
-        const tapsA = userTapsMap.get(a.main_wallet) || 0;
-        const tapsB = userTapsMap.get(b.main_wallet) || 0;
-        return tapsB - tapsA; // Descending
+        const pointsA = userPointsMap.get(a.main_wallet) || 0;
+        const pointsB = userPointsMap.get(b.main_wallet) || 0;
+        return pointsB - pointsA; // Descending
       });
     }
 
