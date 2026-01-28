@@ -72,16 +72,29 @@ export async function GET(request: Request) {
     // Fetch burner keys with encrypted private keys
     const { data: burners, error: burnersError } = await supabase
       .from('burner_keys')
-      .select('burner_wallet, main_wallet, encrypted_key, withdrawn, created_at')
-      .order('created_at', { ascending: false });
+      .select('burner_wallet, main_wallet, encrypted_key, withdrawn, created_at');
 
     if (burnersError) {
       console.error('Error fetching burners:', burnersError);
     }
 
+    // Sort burners by taps_remaining from users table (descending)
+    let sortedBurners = burners || [];
+    if (users && burners) {
+      const userTapsMap = new Map<string, number>();
+      for (const user of users) {
+        userTapsMap.set(user.main_wallet, user.taps_remaining || 0);
+      }
+      sortedBurners = [...burners].sort((a, b) => {
+        const tapsA = userTapsMap.get(a.main_wallet) || 0;
+        const tapsB = userTapsMap.get(b.main_wallet) || 0;
+        return tapsB - tapsA; // Descending
+      });
+    }
+
     return NextResponse.json({
       users: users || [],
-      burners: burners || [],
+      burners: sortedBurners,
     });
   } catch (error) {
     console.error('Admin data error:', error);
