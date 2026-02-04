@@ -380,11 +380,16 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
         onPointerDown={handleTap}
-        className={`relative w-[62vw] max-w-[270px] h-[62vw] max-h-[270px] lg:w-[332px] lg:h-[332px] lg:max-w-none lg:max-h-none bg-white rounded-[40px] lg:rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        style={{ backgroundColor: '#FFFFFF' }}
+        className={`relative w-[62vw] max-w-[270px] h-[62vw] max-h-[270px] lg:w-[332px] lg:h-[332px] lg:max-w-none lg:max-h-none rounded-[40px] lg:rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] select-none ${isDisabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Blue square inside - responsive inset */}
+        {/* Blue square inside - responsive inset - always bright */}
         <div 
-          className="absolute inset-[20%] lg:inset-[71px] bg-[#0000FF] rounded-[16px] lg:rounded-[18px] pointer-events-none"
+          className="absolute inset-[20%] lg:inset-[71px] rounded-[16px] lg:rounded-[18px] pointer-events-none transition-opacity"
+          style={{ 
+            backgroundColor: '#0000FF',
+            opacity: isDisabled ? 0.3 : 1 
+          }}
         />
       </motion.div>
 
