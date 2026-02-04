@@ -80,6 +80,20 @@ const WalletConnect: React.FC<WalletConnectProps> = ({ className = '' }) => {
     }
   }, [isButtonDisabled, isMobile, walletConnectConnector, injectedConnector, connectors, connect]);
 
+  // Allow other UI elements (e.g. Deposit button) to open connect flow.
+  // This avoids duplicating wallet-connect UI/logic across components.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handler = () => {
+      if (isConnected) return;
+      handleConnectClick();
+    };
+
+    window.addEventListener('basion:open-wallet-connect', handler);
+    return () => window.removeEventListener('basion:open-wallet-connect', handler);
+  }, [handleConnectClick, isConnected]);
+
   // Connect with specific connector
   const handleConnectWith = useCallback((connector: typeof connectors[0]) => {
     connect({ connector });

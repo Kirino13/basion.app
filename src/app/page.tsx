@@ -14,6 +14,19 @@ function HomeContent() {
   const { generateReferralLink } = useReferral();
   const [isDepositOpen, setIsDepositOpen] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
+
+  const openWalletConnect = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new Event('basion:open-wallet-connect'));
+  }, []);
+
+  const openDepositOrConnect = useCallback(() => {
+    if (!isConnected) {
+      openWalletConnect();
+      return;
+    }
+    setIsDepositOpen(true);
+  }, [isConnected, openWalletConnect]);
   
   // Boost states
   const [boostPercent, setBoostPercent] = useState<number | null>(null);
@@ -153,7 +166,7 @@ function HomeContent() {
             {/* Row 1: Deposit / Taps / Invite - same width and height */}
             <div className="w-full grid grid-cols-3 gap-2">
               <button
-                onClick={() => setIsDepositOpen(true)}
+                onClick={openDepositOrConnect}
                 className="bg-white hover:bg-white/90 px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px]"
               >
                 <CircleDollarSign size={18} className="text-blue-600" />
@@ -161,7 +174,7 @@ function HomeContent() {
               </button>
 
               <button
-                onClick={() => setIsDepositOpen(true)}
+                onClick={openDepositOrConnect}
                 className="bg-white px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px]"
               >
                 <Zap size={18} fill="currentColor" className="text-yellow-500" />
@@ -265,7 +278,7 @@ function HomeContent() {
               {/* Row 1: Deposit / Taps / Invite */}
               <div className="w-full flex flex-row items-center justify-center gap-3">
                 <button
-                  onClick={() => setIsDepositOpen(true)}
+                  onClick={openDepositOrConnect}
                   className="flex-1 bg-white hover:bg-white/90 py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
                   <CircleDollarSign size={22} className="text-blue-600" />
@@ -273,7 +286,7 @@ function HomeContent() {
                 </button>
 
                 <button
-                  onClick={() => setIsDepositOpen(true)}
+                  onClick={openDepositOrConnect}
                   className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
                   <Zap size={22} fill="currentColor" className="text-yellow-500" />
