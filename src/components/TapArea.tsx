@@ -388,10 +388,29 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           className="absolute inset-[20%] lg:inset-[71px] rounded-[16px] lg:rounded-[18px] pointer-events-none transition-opacity"
           style={{ 
             backgroundColor: '#0000FF',
-            opacity: isDisabled ? 0.3 : 1 
+            opacity: 1,
           }}
         />
       </motion.div>
+
+      {/* Disabled-state hint (mobile-friendly) */}
+      {isDisabled && (
+        <p className="text-slate-600 text-sm text-center px-4 -mt-2">
+          {isRestoring
+            ? 'Checking tap wallet...'
+            : isRestoringFromServer
+              ? 'Restoring tap wallet...'
+              : !isConnected
+                ? 'Connect your wallet'
+                : needsRestore
+                  ? 'Tap wallet found on another device — restore it to enable taps'
+                  : !hasBurner
+                    ? 'Tap wallet not found on this device — open Deposit to create/sync it'
+                    : localTaps <= 0
+                      ? 'Out of taps — deposit more'
+                      : 'Tap is temporarily disabled'}
+        </p>
+      )}
 
       {/* Cross-device restore button */}
       <AnimatePresence>
