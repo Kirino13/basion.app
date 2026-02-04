@@ -1,0 +1,27 @@
+{
+  "accountAssociation": {
+    "header": "",
+    "payload": "",
+    "signature": ""
+  },
+  "miniapp": {
+    "version": "1",
+    "name": "Basion Tap",
+    "homeUrl": "https://basion.app",
+    "iconUrl": "https://basion.app/favicon.png",
+    "splashImageUrl": "https://basion.app/favicon.png",
+    "splashBackgroundColor": "#000000",
+    "subtitle": "Tap-to-earn on Base",
+    "description": "Buy taps, tap onchain, earn points, climb the leaderboard.",
+    "screenshotUrls": ["https://basion.app/favicon.png"],
+    "primaryCategory": "games",
+    "tags": ["tap", "game", "base", "onchain", "basion"],
+    "heroImageUrl": "https://basion.app/favicon.png",
+    "tagline": "Tap. Earn. Repeat.",
+    "ogTitle": "Basion Tap",
+    "ogDescription": "Tap-to-earn game on Base.",
+    "ogImageUrl": "https://basion.app/favicon.png",
+    "noindex": true
+  }
+}
+

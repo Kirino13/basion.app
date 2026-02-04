@@ -18,6 +18,24 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'Basion.app - Tap to Earn on Base',
   description: 'Tap-to-earn game on Base Network. Buy taps, earn points, climb the leaderboard!',
+  other: {
+    // Mini App embed metadata (used by Base App / Farcaster clients)
+    // Docs: https://docs.base.org/mini-apps/quickstart/migrate-existing-apps
+    'fc:miniapp': JSON.stringify({
+      version: 'next',
+      imageUrl: 'https://basion.app/favicon.png',
+      button: {
+        title: 'Play Now',
+        action: {
+          type: 'launch_miniapp',
+          name: 'Basion Tap',
+          url: 'https://basion.app',
+          splashImageUrl: 'https://basion.app/favicon.png',
+          splashBackgroundColor: '#000000',
+        },
+      },
+    }),
+  },
 };
 
 export default function RootLayout({

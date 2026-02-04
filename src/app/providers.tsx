@@ -6,6 +6,7 @@ import { config } from '@/config/wagmi';
 import { useState, useEffect, useRef } from 'react';
 import { useAccount, useSwitchChain, useDisconnect } from 'wagmi';
 import { CHAIN_ID } from '@/config/constants';
+import { sdk } from '@farcaster/miniapp-sdk';
 
 // Component to handle wallet switching - just disconnect on switch, don't clear anything
 function WalletGuard({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
         },
       })
   );
+
+  // Mini App: hide splash screen once UI is ready
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const inMiniApp = await sdk.isInMiniApp();
+        if (!isMounted || !inMiniApp) return;
+        await sdk.actions.ready();
+      } catch {
+        // No-op outside of Mini App environments
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <WagmiProvider config={config}>
