@@ -230,33 +230,33 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       case 'select':
         return (
           <>
-            <div className="flex flex-col items-center mb-8">
-              <div className="w-14 h-14 bg-[#0052FF] rounded-full flex items-center justify-center mb-4 shadow-lg shadow-blue-900/50 border border-white/20">
-                <Wallet className="text-white" size={28} />
+            <div className="flex flex-col items-center mb-4 lg:mb-8">
+              <div className="w-12 h-12 lg:w-14 lg:h-14 bg-[#0052FF] rounded-full flex items-center justify-center mb-3 lg:mb-4 shadow-lg shadow-blue-900/50 border border-white/20">
+                <Wallet className="text-white w-6 h-6 lg:w-7 lg:h-7" />
               </div>
-              <h2 className="text-3xl font-black text-white drop-shadow-md">Buy Taps</h2>
+              <h2 className="text-2xl lg:text-3xl font-black text-white drop-shadow-md">Buy Taps</h2>
             </div>
 
             {isPriceLoading ? (
-              <div className="text-center py-8">
+              <div className="text-center py-6 lg:py-8">
                 <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
                 <p className="text-white/60">Loading...</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="grid grid-cols-2 gap-3 lg:gap-4 mb-4 lg:mb-8">
                   {([0, 1] as const).map((pkg) => (
                     <button
                       key={pkg}
                       onClick={() => setSelectedPackage(pkg)}
-                      className={`h-32 rounded-2xl border transition-all duration-200 flex flex-col items-center justify-center gap-2 ${
+                      className={`h-24 lg:h-32 rounded-xl lg:rounded-2xl border transition-all duration-200 flex flex-col items-center justify-center gap-1 lg:gap-2 ${
                         selectedPackage === pkg
                           ? 'border-blue-400 bg-blue-600/40 shadow-[0_0_20px_rgba(59,130,246,0.5)]'
                           : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/60'
                       }`}
                     >
-                      <span className="text-3xl font-bold text-white drop-shadow-md">${packages[pkg].usd}</span>
-                      <div className="flex items-center gap-1 text-sm font-bold text-blue-200">
+                      <span className="text-2xl lg:text-3xl font-bold text-white drop-shadow-md">${packages[pkg].usd}</span>
+                      <div className="flex items-center gap-1 text-xs lg:text-sm font-bold text-blue-200">
                         <Zap size={14} fill="currentColor" />
                         <span>{packages[pkg].taps.toLocaleString()}</span>
                       </div>
@@ -264,8 +264,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
                   ))}
                 </div>
 
-                <div className="text-center text-white/60 mb-4 space-y-1">
-                  <p>Price: <span className="text-white font-bold">{ethAmount} ETH</span></p>
+                <div className="text-center text-white/60 mb-3 lg:mb-4 space-y-1">
+                  <p className="text-sm lg:text-base">Price: <span className="text-white font-bold">{ethAmount} ETH</span></p>
                   {ethPrice && (
                     <p className="text-xs text-white/40">
                       (1 ETH = ${ethPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })})
@@ -276,7 +276,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
                 <button
                   onClick={handleDeposit}
                   disabled={isWritePending || isConfirming}
-                  className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-lg text-white shadow-lg shadow-blue-600/30 transform transition active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-base lg:text-lg text-white shadow-lg shadow-blue-600/30 transform transition active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isWritePending || isConfirming ? 'Processing...' : 'Confirm Purchase'}
                 </button>
@@ -361,15 +361,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-end lg:items-center justify-center p-0 lg:p-4"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 20 }}
-            animate={{ scale: 1, opacity: 1, y: 0 }}
-            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 100 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 100 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl p-8 w-full max-w-sm shadow-2xl relative"
+            className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-t-3xl lg:rounded-3xl p-6 lg:p-8 w-full max-w-full lg:max-w-sm shadow-2xl relative max-h-[90vh] overflow-y-auto safe-bottom"
           >
+            {/* Drag handle for mobile */}
+            <div className="lg:hidden w-12 h-1 bg-white/30 rounded-full mx-auto mb-4" />
+            
             <button
               onClick={onClose}
               className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"

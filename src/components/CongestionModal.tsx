@@ -18,7 +18,6 @@ const CongestionModal: React.FC<CongestionModalProps> = ({ isOpen, onClose }) =>
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={onClose}
         >
           {/* Backdrop */}
           <motion.div
@@ -26,6 +25,9 @@ const CongestionModal: React.FC<CongestionModalProps> = ({ isOpen, onClose }) =>
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            // Use pointer down so the same "tap" that opened the modal
+            // (triggered on pointerdown) doesn't immediately close it on click (pointerup).
+            onPointerDown={onClose}
           />
 
           {/* Modal */}
@@ -35,6 +37,7 @@ const CongestionModal: React.FC<CongestionModalProps> = ({ isOpen, onClose }) =>
             exit={{ scale: 0.9, opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
             className="relative w-full max-w-[320px] rounded-3xl p-6 text-center"
             style={{
               background: 'linear-gradient(180deg, #E8F4FC 0%, #D6EBF8 100%)',
