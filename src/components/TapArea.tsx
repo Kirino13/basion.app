@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { RefreshCw, Loader2 } from 'lucide-react';
 import { useBurnerWallet, useTapThrottle, useBasionContract, useUserPoints } from '@/hooks';
 import { FloatingText } from '@/types';
 import FloatingBubble from './FloatingBubble';
@@ -30,7 +31,17 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const pendingTxCountRef = useRef(0);
   const boostSyncedRef = useRef(false);
 
-  const { hasBurner, sendTap, isRestoring } = useBurnerWallet();
+  const { 
+    hasBurner, 
+    sendTap, 
+    isRestoring,
+    // Cross-device restore
+    needsRestore,
+    serverBurnerAddress,
+    isRestoringFromServer,
+    restoreError,
+    restoreBurnerFromServer,
+  } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
   const { 
     tapBalance, 
@@ -347,7 +358,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
   );
 
-  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring;
+  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring || needsRestore || isRestoringFromServer;
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
@@ -376,6 +387,49 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           className="absolute inset-[63px] lg:inset-[71px] bg-[#0000FF] rounded-[18px] pointer-events-none"
         />
       </motion.div>
+
+      {/* Cross-device restore button */}
+      <AnimatePresence>
+        {needsRestore && isConnected && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="flex flex-col items-center gap-2"
+          >
+            <p className="text-slate-600 text-sm text-center">
+              Tap wallet found on another device
+            </p>
+            <button
+              onClick={restoreBurnerFromServer}
+              disabled={isRestoringFromServer}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+            >
+              {isRestoringFromServer ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Restoring...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-5 h-5" />
+                  Restore Wallet
+                </>
+              )}
+            </button>
+            {serverBurnerAddress && (
+              <p className="text-slate-400 text-xs font-mono">
+                {serverBurnerAddress.slice(0, 8)}...{serverBurnerAddress.slice(-6)}
+              </p>
+            )}
+            {restoreError && (
+              <p className="text-red-500 text-sm">
+                {restoreError}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Only show: connect wallet, banned, deposit messages */}
       {error && (error.includes('deposit') || error.includes('taps') || error.includes('Connect') || error.includes('banned')) && (

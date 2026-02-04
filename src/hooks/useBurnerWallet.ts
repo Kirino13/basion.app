@@ -75,6 +75,12 @@ export function useBurnerWallet() {
   const [hasBurner, setHasBurner] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  // NEW: State for cross-device restore
+  const [needsRestore, setNeedsRestore] = useState(false);
+  const [serverBurnerAddress, setServerBurnerAddress] = useState<string | null>(null);
+  const [isRestoringFromServer, setIsRestoringFromServer] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  
   const { address: mainWallet } = useAccount();
   const { signMessageAsync } = useSignMessage();
 
@@ -98,6 +104,9 @@ export function useBurnerWallet() {
     if (!mainWallet) {
       setBurnerAddress(null);
       setHasBurner(false);
+      setNeedsRestore(false);
+      setServerBurnerAddress(null);
+      setRestoreError(null);
       return;
     }
 
@@ -108,17 +117,18 @@ export function useBurnerWallet() {
     const localAddress = safeLocalStorage.getItem(keys.burnerAddress);
     
     if (localKey && localAddress) {
-      // Burner exists locally
+      // Burner exists locally - all good
       setBurnerAddress(localAddress);
       setHasBurner(true);
+      setNeedsRestore(false);
+      setServerBurnerAddress(null);
       return;
     }
 
     // No local burner - try to restore from Supabase
     // Only check once per wallet per session (unless refreshTrigger changed)
     if (checkedWallets.has(mainWallet.toLowerCase()) && refreshTrigger === 0) {
-      setBurnerAddress(null);
-      setHasBurner(false);
+      // Already checked, maintain current state
       return;
     }
 
@@ -127,53 +137,60 @@ export function useBurnerWallet() {
     
     // Try to restore from backend
     setIsRestoring(true);
-    restoreBurnerFromBackend(mainWallet, keys)
-      .then(restored => {
-        if (restored) {
-          setBurnerAddress(restored.address);
+    checkBurnerOnBackend(mainWallet, keys)
+      .then(result => {
+        if (result.hasLocal) {
+          // Found valid local key
+          setBurnerAddress(result.address!);
           setHasBurner(true);
-        } else {
+          setNeedsRestore(false);
+          setServerBurnerAddress(null);
+        } else if (result.existsOnServer) {
+          // Burner exists on server but no local key - needs restore
           setBurnerAddress(null);
           setHasBurner(false);
+          setNeedsRestore(true);
+          setServerBurnerAddress(result.address!);
+        } else {
+          // No burner anywhere - new user
+          setBurnerAddress(null);
+          setHasBurner(false);
+          setNeedsRestore(false);
+          setServerBurnerAddress(null);
         }
       })
       .catch(err => {
-        console.error('Failed to restore burner:', err);
+        console.error('Failed to check burner:', err);
         setBurnerAddress(null);
         setHasBurner(false);
+        setNeedsRestore(false);
       })
       .finally(() => {
         setIsRestoring(false);
       });
   }, [mainWallet, refreshTrigger]);
 
-  // Check if burner exists on backend
-  // SECURITY: Private keys are now server-side only - client cannot decrypt
-  // This function only checks if burner exists and returns the address
-  // The actual key is stored locally and used from localStorage
-  const restoreBurnerFromBackend = async (
+  // Check if burner exists on backend and/or locally
+  // Returns: { hasLocal, existsOnServer, address }
+  const checkBurnerOnBackend = async (
     wallet: string, 
     keys: { burnerKey: string; burnerAddress: string }
-  ): Promise<{ address: string; privateKey: string } | null> => {
+  ): Promise<{ hasLocal: boolean; existsOnServer: boolean; address: string | null }> => {
     try {
-      // Check if burner exists on backend (returns only address, not encrypted key)
+      // Check if burner exists on backend
       const res = await fetch(`/api/get-burner?wallet=${wallet}`);
       
       if (!res.ok) {
-        return null;
+        return { hasLocal: false, existsOnServer: false, address: null };
       }
       
       const data = await res.json();
       
       if (!data.exists) {
-        return null;
+        return { hasLocal: false, existsOnServer: false, address: null };
       }
       
-      // Burner exists on backend but private key is encrypted server-side
-      // We can only use it if we have the key in localStorage
-      // Otherwise, user needs to create a new burner (via new deposit)
-      
-      // Check if we have the key locally
+      // Burner exists on server - check if we have local key
       const localKey = safeLocalStorage.getItem(keys.burnerKey);
       if (localKey) {
         // Validate the local key matches the backend address
@@ -181,10 +198,7 @@ export function useBurnerWallet() {
           const wallet_obj = new ethers.Wallet(localKey);
           if (wallet_obj.address.toLowerCase() === data.burnerAddress.toLowerCase()) {
             safeLocalStorage.setItem(keys.burnerAddress, data.burnerAddress);
-            return {
-              address: data.burnerAddress,
-              privateKey: localKey,
-            };
+            return { hasLocal: true, existsOnServer: true, address: data.burnerAddress };
           }
         } catch {
           // Invalid local key, clear it
@@ -193,14 +207,79 @@ export function useBurnerWallet() {
         }
       }
       
-      // No valid local key - user needs to create new burner
-      // This can happen if user clears browser data
-      return null;
+      // Burner exists on server but no valid local key - needs restore
+      return { hasLocal: false, existsOnServer: true, address: data.burnerAddress };
     } catch (err) {
       console.error('Error checking burner on backend:', err);
-      return null;
+      return { hasLocal: false, existsOnServer: false, address: null };
     }
   };
+
+  // Restore burner from server (cross-device sync)
+  // Requires signature from mainWallet to prove ownership
+  const restoreBurnerFromServer = useCallback(async (): Promise<boolean> => {
+    if (!mainWallet || !serverBurnerAddress) {
+      setRestoreError('No wallet connected or no burner to restore');
+      return false;
+    }
+
+    setIsRestoringFromServer(true);
+    setRestoreError(null);
+
+    try {
+      const timestamp = Date.now().toString();
+      const message = `Restore Basion burner for ${mainWallet} at ${timestamp}`;
+      
+      // Request signature from user
+      const signature = await signMessageAsync({ message });
+      
+      // Call restore API
+      const response = await fetch('/api/restore-burner', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          wallet: mainWallet,
+          signature,
+          timestamp,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setRestoreError(data.error || 'Failed to restore burner');
+        return false;
+      }
+
+      // Save restored key to localStorage
+      const keys = getStorageKeys(mainWallet);
+      safeLocalStorage.setItem(keys.burnerKey, data.privateKey);
+      safeLocalStorage.setItem(keys.burnerAddress, data.burnerAddress);
+
+      // Update state
+      setBurnerAddress(data.burnerAddress);
+      setHasBurner(true);
+      setNeedsRestore(false);
+      setServerBurnerAddress(null);
+
+      // Dispatch event to notify other components
+      window.dispatchEvent(new Event(BURNER_CREATED_EVENT));
+
+      return true;
+    } catch (err) {
+      console.error('Failed to restore burner from server:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      
+      if (errorMessage.includes('User rejected') || errorMessage.includes('user rejected')) {
+        setRestoreError('Signature cancelled');
+      } else {
+        setRestoreError(errorMessage);
+      }
+      return false;
+    } finally {
+      setIsRestoringFromServer(false);
+    }
+  }, [mainWallet, serverBurnerAddress, signMessageAsync]);
 
   // Create new burner wallet for current mainWallet
   // Returns object with address and privateKey for compatibility
@@ -400,6 +479,13 @@ export function useBurnerWallet() {
     burnerAddress,
     hasBurner,
     isRestoring,
+    // Cross-device restore
+    needsRestore,
+    serverBurnerAddress,
+    isRestoringFromServer,
+    restoreError,
+    restoreBurnerFromServer,
+    // Actions
     createBurner,
     getBurner,
     getBurnerAddress,
