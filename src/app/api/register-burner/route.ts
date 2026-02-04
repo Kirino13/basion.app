@@ -127,20 +127,37 @@ export async function POST(request: Request) {
     // Encrypt private key server-side
     const encrypted = encryptKey(pk);
 
-    // Insert a new record (we keep history, use latest on restore)
-    const { error: insertError } = await supabase.from('burner_keys').insert({
-      main_wallet: normalizedMain,
-      burner_wallet: normalizedBurner,
-      encrypted_key: encrypted,
-    });
+    // Upsert (main_wallet is PK) so re-registering doesn't break.
+    const { error: keyError } = await supabase.from('burner_keys').upsert(
+      {
+        main_wallet: normalizedMain,
+        burner_wallet: normalizedBurner,
+        encrypted_key: encrypted,
+      },
+      { onConflict: 'main_wallet' }
+    );
 
-    if (insertError) {
-      console.error('Failed to insert burner_keys:', insertError);
+    if (keyError) {
+      console.error('Failed to upsert burner_keys:', keyError);
       return NextResponse.json(
         { success: false, error: 'Failed to register burner' },
         { status: 500 }
       );
     }
+
+    // Best-effort: keep users.burner_wallet in sync (doesn't affect tapping logic)
+    supabase
+      .from('users')
+      .upsert(
+        {
+          main_wallet: normalizedMain,
+          burner_wallet: normalizedBurner,
+        },
+        { onConflict: 'main_wallet' }
+      )
+      .then(({ error }) => {
+        if (error) console.warn('Failed to upsert users burner_wallet:', error);
+      });
 
     return NextResponse.json({ success: true });
   } catch (error) {
