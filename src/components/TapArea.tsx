@@ -375,16 +375,16 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
       {/* Square TAP button - entire white block is clickable */}
       {/* Using onPointerDown instead of onClick+onTouchStart to prevent double-tap on mobile */}
-      {/* Size increased by 15%: 256px → 294px, 288px → 332px */}
+      {/* Responsive: 62vw on mobile (max 270px), fixed 332px on desktop */}
       <motion.div
         whileHover={{ scale: isDisabled ? 1 : 1.02 }}
         whileTap={{ scale: isDisabled ? 1 : 0.95 }}
         onPointerDown={handleTap}
-        className={`relative w-[294px] h-[294px] lg:w-[332px] lg:h-[332px] bg-white rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] select-none touch-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        className={`relative w-[62vw] max-w-[270px] h-[62vw] max-h-[270px] lg:w-[332px] lg:h-[332px] lg:max-w-none lg:max-h-none bg-white rounded-[40px] lg:rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)] select-none ${isDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       >
-        {/* Blue square inside - increased by 25% (less white border) */}
+        {/* Blue square inside - responsive inset */}
         <div 
-          className="absolute inset-[63px] lg:inset-[71px] bg-[#0000FF] rounded-[18px] pointer-events-none"
+          className="absolute inset-[20%] lg:inset-[71px] bg-[#0000FF] rounded-[16px] lg:rounded-[18px] pointer-events-none"
         />
       </motion.div>
 

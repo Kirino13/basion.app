@@ -12,10 +12,24 @@
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 }
 
-body {
+html, body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  /* Mobile optimizations */
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+  /* Prevent pull-to-refresh */
+  overscroll-behavior-y: contain;
+}
+
+/* Safe area for iPhone with notch */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.safe-top {
+  padding-top: env(safe-area-inset-top);
 }
 
 /* Custom scrollbar for leaderboard - soft blue, glassmorphism style */

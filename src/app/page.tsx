@@ -96,7 +96,7 @@ function HomeContent() {
   };
 
   return (
-    <div className="relative w-full min-h-screen font-sans text-slate-800 overflow-hidden bg-sky-200 select-none">
+    <div className="relative w-full min-h-screen font-sans text-slate-800 overflow-x-hidden bg-sky-200 select-none">
       <CloudBackground />
 
       {/* Deposit Modal */}
@@ -106,8 +106,146 @@ function HomeContent() {
         onDepositSuccess={handleDepositSuccess}
       />
 
-      {/* Main Split Layout */}
-      <div className="relative z-10 w-full min-h-screen flex flex-col lg:flex-row">
+      {/* ===== MOBILE LAYOUT (single column) ===== */}
+      <div className="relative z-10 w-full min-h-screen flex flex-col lg:hidden">
+        {/* Header: X + Points + Wallet */}
+        <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+          {/* X (Twitter) Button - left side, same height as other buttons */}
+          <a
+            href="https://x.com/basion_tap"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-white/70 hover:bg-white/90 backdrop-blur-md w-12 h-12 rounded-xl text-slate-800 transition-all shadow-lg shadow-blue-900/10 flex items-center justify-center shrink-0"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="w-5 h-5 fill-black">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
+            </svg>
+          </a>
+
+          {/* Points Badge */}
+          <div className="flex-1 bg-green-500 rounded-xl h-12 flex justify-center items-center shadow-lg shadow-green-500/30">
+            <span className="text-base font-bold text-white tracking-wide">
+              {points % 1 === 0 ? points.toLocaleString() : points.toFixed(1)} pts
+            </span>
+          </div>
+
+          {/* Connect Wallet */}
+          <div className="flex-1">
+            <WalletConnect className="w-full h-12" />
+          </div>
+        </div>
+
+        {/* Main Content with proper spacing */}
+        <div className="flex-1 flex flex-col px-4">
+          {/* Tap Area - centered with more space */}
+          <div className="flex-1 flex items-center justify-center py-4">
+            {isConnected ? (
+              <TapArea onOpenDeposit={() => setIsDepositOpen(true)} onTapSuccess={handleTapSuccess} />
+            ) : (
+              <div className="relative w-[62vw] max-w-[270px] h-[62vw] max-h-[270px] bg-white rounded-[40px] shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+                <div className="absolute inset-[18%] bg-[#0000FF] rounded-[14px]" />
+              </div>
+            )}
+          </div>
+
+          {/* Action Buttons with spacing */}
+          <div className="w-full flex flex-col gap-2 mb-10">
+            {/* Row 1: Deposit / Taps / Invite - same width and height */}
+            <div className="w-full grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setIsDepositOpen(true)}
+                className="bg-white hover:bg-white/90 px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px]"
+              >
+                <CircleDollarSign size={18} className="text-blue-600" />
+                <span>$</span>
+              </button>
+
+              <button
+                onClick={() => setIsDepositOpen(true)}
+                className="bg-white px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px]"
+              >
+                <Zap size={18} fill="currentColor" className="text-yellow-500" />
+                <motion.span key={tapBalance} initial={{ scale: 1.1 }} animate={{ scale: 1 }}>
+                  {tapBalance.toLocaleString().replace(/,/g, ' ')}
+                </motion.span>
+              </button>
+
+              <button
+                onClick={handleInvite}
+                disabled={!isConnected}
+                className={`px-2 rounded-xl font-bold text-sm shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px] ${
+                  inviteCopied
+                    ? 'bg-green-500 text-white'
+                    : 'bg-white hover:bg-white/90 text-slate-900 disabled:opacity-50'
+                }`}
+              >
+                {inviteCopied ? (
+                  <><Check size={18} /></>
+                ) : (
+                  <><Copy size={18} className="text-blue-600" /> +10%</>
+                )}
+              </button>
+            </div>
+
+            {/* Row 2: Boost / Code - same width and height */}
+            <div className="w-full grid grid-cols-2 gap-2">
+              <button
+                className="bg-white px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 flex items-center justify-center gap-1 cursor-default h-[44px]"
+              >
+                <Rocket size={18} className="text-blue-600" />
+                {boostPercent === null ? '--' : boostPercent}%
+              </button>
+
+              <div className="bg-white px-2 rounded-xl shadow-xl shadow-blue-900/10 flex items-center gap-1 h-[44px]">
+                <input
+                  type="text"
+                  placeholder="Code"
+                  value={boostCode}
+                  onChange={(e) => setBoostCode(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleApplyCode()}
+                  disabled={!isConnected || isApplyingCode}
+                  className="flex-1 bg-transparent text-slate-900 font-bold text-sm placeholder:text-slate-400 outline-none min-w-0"
+                />
+                <button
+                  onClick={handleApplyCode}
+                  disabled={!isConnected || !boostCode.trim() || isApplyingCode}
+                  className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-300 disabled:cursor-not-allowed p-1.5 rounded-lg transition-all active:scale-95 shrink-0"
+                >
+                  {isApplyingCode ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <Send size={16} className="text-white" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Boost Message */}
+            <AnimatePresence>
+              {boostMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className={`text-center text-xs font-medium ${
+                    boostMessage.type === 'success' ? 'text-green-600' : 'text-red-500'
+                  }`}
+                >
+                  {boostMessage.text}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Leaderboard - smaller, at the bottom with padding */}
+          <div className="w-full pb-4">
+            <Leaderboard currentUserPoints={points} />
+          </div>
+        </div>
+      </div>
+
+      {/* ===== DESKTOP LAYOUT (split) ===== */}
+      <div className="relative z-10 w-full min-h-screen hidden lg:flex lg:flex-row">
         {/* LEFT ZONE (65%): The Game */}
         <div className="flex-[6.5] relative flex flex-col items-center justify-center p-6">
           <div className="flex flex-col items-center gap-6 w-full max-w-xl mb-12">
@@ -116,20 +254,16 @@ function HomeContent() {
               <TapArea onOpenDeposit={() => setIsDepositOpen(true)} onTapSuccess={handleTapSuccess} />
             ) : (
               <div className="flex flex-col items-center gap-6">
-                {/* Placeholder - entire white block visible, no text */}
-                {/* Size increased by 15% to match TapArea */}
-                <div className="relative w-[294px] h-[294px] lg:w-[332px] lg:h-[332px] bg-white/60 rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
-                  {/* Blue square inside */}
-                  <div className="absolute inset-[80px] lg:inset-[90px] bg-[rgba(0,0,255,0.5)] rounded-[18px]" />
+                <div className="relative w-[332px] h-[332px] bg-white/60 rounded-[56px] shadow-[0_20px_60px_rgba(0,0,0,0.18)]">
+                  <div className="absolute inset-[90px] bg-[rgba(0,0,255,0.5)] rounded-[18px]" />
                 </div>
               </div>
             )}
 
-            {/* Bottom Action Area - buttons increased by 30% */}
+            {/* Bottom Action Area */}
             <div className="w-full flex flex-col px-2 mt-16 gap-3">
               {/* Row 1: Deposit / Taps / Invite */}
               <div className="w-full flex flex-row items-center justify-center gap-3">
-                {/* Deposit Button */}
                 <button
                   onClick={() => setIsDepositOpen(true)}
                   className="flex-1 bg-white hover:bg-white/90 py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
@@ -138,7 +272,6 @@ function HomeContent() {
                   Deposit
                 </button>
 
-                {/* Tap Balance Display */}
                 <button
                   onClick={() => setIsDepositOpen(true)}
                   className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-2"
@@ -149,7 +282,6 @@ function HomeContent() {
                   </motion.span>
                 </button>
 
-                {/* Invite Button */}
                 <button
                   onClick={handleInvite}
                   disabled={!isConnected}
@@ -161,21 +293,11 @@ function HomeContent() {
                 >
                   <AnimatePresence mode="wait">
                     {inviteCopied ? (
-                      <motion.div
-                        key="copied"
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="flex items-center gap-2"
-                      >
+                      <motion.div key="copied" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2">
                         <Check size={22} /> Copied!
                       </motion.div>
                     ) : (
-                      <motion.div
-                        key="invite"
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="flex items-center gap-2"
-                      >
+                      <motion.div key="invite" initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2">
                         <Copy size={22} className="text-blue-600" /> Invite +10%
                       </motion.div>
                     )}
@@ -185,18 +307,13 @@ function HomeContent() {
 
               {/* Row 2: Boost Button / Code Input */}
               <div className="w-full flex flex-row items-center justify-center gap-3">
-                {/* Boost Button */}
                 <button
                   className="flex-1 bg-white py-4 px-4 rounded-2xl font-bold text-base text-slate-900 shadow-xl shadow-blue-900/10 transition-all flex items-center justify-center gap-2 cursor-default"
-                  title="Your boost is applied to points"
                 >
                   <Rocket size={22} className="text-blue-600" />
-                  <span>
-                    Boost {boostPercent === null ? '--' : boostPercent}%
-                  </span>
+                  Boost {boostPercent === null ? '--' : boostPercent}%
                 </button>
 
-                {/* Code Input + Apply */}
                 <div className="flex-1 bg-white py-2 px-3 rounded-2xl shadow-xl shadow-blue-900/10 flex items-center gap-2">
                   <input
                     type="text"
@@ -239,7 +356,7 @@ function HomeContent() {
             </div>
           </div>
 
-          {/* Footer Social Button */}
+          {/* Footer Social Button - Desktop only */}
           <div className="absolute bottom-6 left-6">
             <a
               href="https://x.com/basion_tap"
@@ -247,11 +364,7 @@ function HomeContent() {
               rel="noopener noreferrer"
               className="bg-white/40 hover:bg-white/60 backdrop-blur-md w-16 h-16 rounded-full text-slate-800 transition-all shadow-lg shadow-blue-900/10 flex items-center justify-center group"
             >
-              <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-                className="w-8 h-8 fill-black group-hover:scale-110 transition-transform"
-              >
+              <svg viewBox="0 0 24 24" aria-hidden="true" className="w-8 h-8 fill-black group-hover:scale-110 transition-transform">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"></path>
               </svg>
             </a>
@@ -259,17 +372,14 @@ function HomeContent() {
         </div>
 
         {/* RIGHT ZONE (35%): HUD & Leaderboard */}
-        <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 lg:py-8 lg:pr-8 lg:pl-0 min-h-0 mx-auto lg:mx-0">
+        <div className="flex-[3.5] lg:max-w-md w-full relative flex flex-col p-6 py-8 pr-8 pl-0 min-h-0">
           {/* Top Row */}
           <div className="grid grid-cols-2 gap-4 mt-2 mb-6 w-full">
-            {/* Points Badge - shows decimal points from DB */}
             <div className="bg-green-500 rounded-xl py-3 flex flex-col justify-center items-center shadow-lg shadow-green-500/30">
               <span className="text-lg font-bold text-white tracking-wide">
                 {points % 1 === 0 ? points.toLocaleString() : points.toFixed(1)} pts
               </span>
             </div>
-
-            {/* Connect Wallet */}
             <WalletConnect />
           </div>
 
@@ -279,8 +389,9 @@ function HomeContent() {
           </div>
         </div>
       </div>
+
       {/* Version marker for deploy verification */}
-      <span className="hidden" data-version="v2.2-tap-fix">v2.2</span>
+      <span className="hidden" data-version="v2.3-mobile">v2.3</span>
     </div>
   );
 }

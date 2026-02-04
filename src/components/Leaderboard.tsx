@@ -81,27 +81,27 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const getRankBadge = (rank: number) => {
     if (rank === 1) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-b from-[#FFD700] to-[#FFA500] flex items-center justify-center text-white text-sm font-bold shadow-sm">
+        <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-gradient-to-b from-[#FFD700] to-[#FFA500] flex items-center justify-center text-white text-xs lg:text-sm font-bold shadow-sm">
           1
         </div>
       );
     }
     if (rank === 2) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-b from-[#E8E8E8] to-[#B8B8B8] flex items-center justify-center text-white text-sm font-bold shadow-sm">
+        <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-gradient-to-b from-[#E8E8E8] to-[#B8B8B8] flex items-center justify-center text-white text-xs lg:text-sm font-bold shadow-sm">
           2
         </div>
       );
     }
     if (rank === 3) {
       return (
-        <div className="w-8 h-8 rounded-full bg-gradient-to-b from-[#E8A060] to-[#CD7F32] flex items-center justify-center text-white text-sm font-bold shadow-sm">
+        <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-gradient-to-b from-[#E8A060] to-[#CD7F32] flex items-center justify-center text-white text-xs lg:text-sm font-bold shadow-sm">
           3
         </div>
       );
     }
     return (
-      <div className="w-8 h-8 rounded-full bg-slate-100 text-[#1a1a2e] text-sm font-semibold flex items-center justify-center">
+      <div className="w-6 h-6 lg:w-8 lg:h-8 rounded-full bg-slate-100 text-[#1a1a2e] text-xs lg:text-sm font-semibold flex items-center justify-center">
         {rank}
       </div>
     );
@@ -112,69 +112,59 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     return points.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   };
 
-  // Calculate exact height for 10 entries
-  // Each entry: py-[14px] = 28px + content ~32px = 60px
-  // 10 entries = 600px, 9 gaps of 8px = 72px
-  const ENTRY_HEIGHT = 60;
-  const GAP = 8;
-  const VISIBLE_ENTRIES = 10;
-  const listMaxHeight = VISIBLE_ENTRIES * ENTRY_HEIGHT + (VISIBLE_ENTRIES - 1) * GAP;
+  // Calculate height for visible entries - responsive
+  // Mobile: smaller entries (44px) with 6px gap
+  // Desktop: 60px entries with 8px gap
+  // Always show 10 entries visible, scrollable for rest
 
   // Loading state
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
-        <div className="px-5 py-3 border-b border-white/30 flex items-center gap-3 shrink-0">
-          <div className="p-2 bg-white/30 rounded-xl">
-            <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
+      <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-2xl lg:rounded-3xl overflow-hidden border border-white/40">
+        <div className="px-3 lg:px-5 py-2 lg:py-3 border-b border-white/30 flex items-center gap-2 lg:gap-3 shrink-0">
+          <div className="p-1.5 lg:p-2 bg-white/30 rounded-lg lg:rounded-xl">
+            <Trophy className="w-4 h-4 lg:w-5 lg:h-5 text-[#0052FF]" strokeWidth={2.5} />
           </div>
-          <h3 className="text-[#0B1B3A] font-bold text-lg">Leaderboard</h3>
+          <h3 className="text-[#0B1B3A] font-bold text-base lg:text-lg">Leaderboard</h3>
         </div>
-        <div className="flex items-center justify-center py-8">
-          <div className="animate-pulse text-slate-500">Loading...</div>
+        <div className="flex items-center justify-center py-6 lg:py-8">
+          <div className="animate-pulse text-slate-500 text-sm lg:text-base">Loading...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-3xl overflow-hidden border border-white/40">
+    <div className="flex flex-col w-full bg-[#4da6ff]/30 backdrop-blur-sm rounded-2xl lg:rounded-3xl overflow-hidden border border-white/40">
       {/* Header */}
-      <div className="px-5 py-3 border-b border-white/30 flex items-center gap-3 shrink-0">
-        <div className="p-2 bg-white/30 rounded-xl">
-          <Trophy className="w-5 h-5 text-[#0052FF]" strokeWidth={2.5} />
+      <div className="px-3 lg:px-5 py-2 lg:py-3 border-b border-white/30 flex items-center gap-2 lg:gap-3 shrink-0">
+        <div className="p-1.5 lg:p-2 bg-white/30 rounded-lg lg:rounded-xl">
+          <Trophy className="w-4 h-4 lg:w-5 lg:h-5 text-[#0052FF]" strokeWidth={2.5} />
         </div>
-        <h3 className="text-[#0B1B3A] font-bold text-lg">
+        <h3 className="text-[#0B1B3A] font-bold text-base lg:text-lg">
           Leaderboard
         </h3>
       </div>
 
-      {/* List — exactly 10 entries visible, scrollable for 11+ */}
+      {/* List — scrollable, smaller on mobile */}
       <div 
-        className="overflow-x-hidden px-3 py-2 leaderboard-scroll" 
-        style={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          gap: `${GAP}px`,
-          maxHeight: `${listMaxHeight}px`,
-          overflowY: entries.length > VISIBLE_ENTRIES ? 'auto' : 'hidden',
-        }}
+        className="overflow-x-hidden px-2 lg:px-3 py-1 lg:py-2 leaderboard-scroll flex flex-col gap-1 lg:gap-2 max-h-[180px] lg:max-h-[600px] overflow-y-auto"
       >
         {error ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-            <p className="text-red-500 text-sm">{error}</p>
+          <div className="flex flex-col items-center justify-center h-full text-center py-6 lg:py-8">
+            <p className="text-red-500 text-xs lg:text-sm">{error}</p>
             <button 
               onClick={fetchLeaderboard}
-              className="mt-2 text-[#0052FF] text-sm hover:underline"
+              className="mt-2 text-[#0052FF] text-xs lg:text-sm hover:underline"
             >
               Try again
             </button>
           </div>
         ) : entries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center py-8">
-            <Users className="w-12 h-12 text-slate-300 mb-3" />
-            <p className="text-slate-500 text-sm">No players yet</p>
-            <p className="text-slate-400 text-xs mt-1">Be the first!</p>
+          <div className="flex flex-col items-center justify-center h-full text-center py-6 lg:py-8">
+            <Users className="w-10 h-10 lg:w-12 lg:h-12 text-slate-300 mb-2 lg:mb-3" />
+            <p className="text-slate-500 text-xs lg:text-sm">No players yet</p>
+            <p className="text-slate-400 text-[10px] lg:text-xs mt-1">Be the first!</p>
           </div>
         ) : (
           entries.map((item) => {
@@ -182,11 +172,11 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             return (
               <div
                 key={item.rank}
-                className="flex items-center justify-between px-4 py-[14px] rounded-2xl bg-[#c8e8ff]/90 border border-white/60 shrink-0"
+                className="flex items-center justify-between px-2 lg:px-4 py-2 lg:py-[14px] rounded-xl lg:rounded-2xl bg-[#c8e8ff]/90 border border-white/60 shrink-0"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 lg:gap-3">
                   {getRankBadge(item.rank)}
-                  <span className="text-[15px] font-semibold text-[#1a1a2e]">
+                  <span className="text-xs lg:text-[15px] font-semibold text-[#1a1a2e]">
                     {item.wallet.length > 13 
                       ? `${item.wallet.slice(0, 6)}...${item.wallet.slice(-4)}`
                       : item.wallet
@@ -195,7 +185,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
                 </div>
 
                 <span
-                  className={`text-[15px] font-bold text-right ${
+                  className={`text-xs lg:text-[15px] font-bold text-right ${
                     isTop3 ? 'text-[#0066FF]' : 'text-[#1a1a2e]'
                   }`}
                 >
