@@ -49,7 +49,7 @@ export default function RootLayout({
         {/* Mobile viewport - prevents zoom, ensures correct scaling */}
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
         {/* Base Build domain verification */}
-        <meta name="base:app_id" content="69838da7e22f13d12aee7de0" />
+        <meta name="base:app_id" content="69839f412d51dfb241e4e344" />
         {/* Hide Next.js dev overlay */}
         <script
           dangerouslySetInnerHTML={{
