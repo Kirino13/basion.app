@@ -51,8 +51,6 @@ let cachedBurnerKey: string | null = null;
 // Nonce and gas management for parallel transactions
 let currentNonce: number | null = null;
 let cachedGasPrice: bigint | null = null;
-let cachedMaxFeePerGas: bigint | null = null;
-let cachedMaxPriorityFeePerGas: bigint | null = null;
 let gasPriceLastFetch: number = 0;
 const GAS_PRICE_CACHE_MS = 30000; // Cache gas price for 30 seconds
 const FIXED_GAS_LIMIT = 100000n; // Fixed gas limit for tap() - we know it uses ~50k
@@ -402,8 +400,6 @@ export function useBurnerWallet() {
       cachedBurnerKey = burnerData.privateKey;
       currentNonce = null;
       cachedGasPrice = null;
-      cachedMaxFeePerGas = null;
-      cachedMaxPriorityFeePerGas = null;
     }
 
     // Get nonce - fetch once from RPC, then increment locally
@@ -413,18 +409,9 @@ export function useBurnerWallet() {
 
     // Get gas price - cache for 30 seconds to avoid RPC calls
     const now = Date.now();
-    if (
-      (cachedGasPrice === null && cachedMaxFeePerGas === null) ||
-      now - gasPriceLastFetch > GAS_PRICE_CACHE_MS
-    ) {
+    if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
       const feeData = await provider.getFeeData();
-      // Base is EIP-1559. Prefer maxFee/maxPriority. Avoid legacy fallback 1 gwei (can be insanely expensive on Base).
-      cachedMaxFeePerGas = feeData.maxFeePerGas ?? null;
-      cachedMaxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? null;
-
-      // Legacy fallback (only if host doesn't support EIP-1559 fee fields)
-      // Use a conservative fallback (~0.003 gwei) instead of 1 gwei.
-      cachedGasPrice = feeData.gasPrice ?? 3_000_000n;
+      cachedGasPrice = feeData.gasPrice || 1000000000n; // fallback 1 gwei
       gasPriceLastFetch = now;
     }
 
@@ -432,19 +419,11 @@ export function useBurnerWallet() {
     const nonce = currentNonce++;
 
     // Send with ALL params explicit - NO additional RPC calls needed
-    const overrides: Record<string, unknown> = {
+    const tx = await cachedContract.tap({
       nonce,
       gasLimit: FIXED_GAS_LIMIT,
-    };
-
-    if (cachedMaxFeePerGas && cachedMaxPriorityFeePerGas) {
-      overrides.maxFeePerGas = cachedMaxFeePerGas;
-      overrides.maxPriorityFeePerGas = cachedMaxPriorityFeePerGas;
-    } else if (cachedGasPrice) {
-      overrides.gasPrice = cachedGasPrice;
-    }
-
-    const tx = await cachedContract.tap(overrides);
+      gasPrice: cachedGasPrice,
+    });
     return tx;
   }, [getBurner]);
 
