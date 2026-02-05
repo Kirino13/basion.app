@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
-import { verifyMessage } from 'viem';
+import { createPublicClient, http, verifyMessage } from 'viem';
+import { base } from 'viem/chains';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { encryptKey } from '@/lib/encryption';
+import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
+import { BASION_ABI } from '@/config/abi';
 
 // Basic rate limiting (best-effort, in-memory)
 const rateLimitMap = new Map<string, { count: number; resetAt: number; blockedUntil?: number }>();
@@ -41,8 +44,9 @@ function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
  *  mainWallet: string,
  *  burnerWallet: string,
  *  privateKey: string,
- *  signature: string,
- *  timestamp: string
+ *  signature?: string,
+ *  timestamp?: string,
+ *  txHash?: string
  * }
  */
 export async function POST(request: Request) {
@@ -57,9 +61,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { mainWallet, burnerWallet, privateKey, signature, timestamp } = body ?? {};
+    const { mainWallet, burnerWallet, privateKey, signature, timestamp, txHash } = body ?? {};
 
-    if (!mainWallet || !burnerWallet || !privateKey || !signature || !timestamp) {
+    if (!mainWallet || !burnerWallet || !privateKey || (!txHash && (!signature || !timestamp))) {
       return NextResponse.json(
         { success: false, error: 'Missing required fields' },
         { status: 400 }
@@ -76,12 +80,79 @@ export async function POST(request: Request) {
       );
     }
 
-    const ts = parseInt(String(timestamp));
-    if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
-      return NextResponse.json(
-        { success: false, error: 'Signature expired or invalid timestamp' },
-        { status: 401 }
-      );
+    // Authenticate request:
+    // - Preferred: txHash proof (works in Base App even if signMessage is unreliable)
+    // - Fallback: signature proof (EOA wallets)
+    if (txHash) {
+      const hash = String(txHash);
+      if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) {
+        return NextResponse.json({ success: false, error: 'Invalid txHash format' }, { status: 400 });
+      }
+
+      const client = createPublicClient({
+        chain: base,
+        transport: http(RPC_URL),
+      });
+
+      try {
+        const tx = await client.getTransaction({ hash: hash as `0x${string}` });
+        if (tx.from.toLowerCase() !== normalizedMain) {
+          return NextResponse.json({ success: false, error: 'txHash does not match wallet' }, { status: 401 });
+        }
+        const receipt = await client.getTransactionReceipt({ hash: hash as `0x${string}` });
+        if (receipt.status !== 'success') {
+          return NextResponse.json({ success: false, error: 'Transaction not successful' }, { status: 401 });
+        }
+
+        // Ensure contract state links main -> burner (prevents registering arbitrary keys)
+        const userInfo = await client.readContract({
+          address: CONTRACT_ADDRESS,
+          abi: BASION_ABI,
+          functionName: 'getUserInfo',
+          args: [normalizedMain as `0x${string}`],
+        });
+        const contractBurner = String((userInfo as readonly [unknown, unknown, unknown])[2] ?? '').toLowerCase();
+        if (!contractBurner || contractBurner === '0x0000000000000000000000000000000000000000') {
+          return NextResponse.json({ success: false, error: 'No burner registered on contract' }, { status: 401 });
+        }
+        if (contractBurner !== normalizedBurner) {
+          return NextResponse.json({ success: false, error: 'Burner mismatch' }, { status: 401 });
+        }
+      } catch (e) {
+        console.error('txHash verification failed:', e);
+        return NextResponse.json({ success: false, error: 'Failed to verify txHash' }, { status: 401 });
+      }
+    } else {
+      const ts = parseInt(String(timestamp));
+      if (isNaN(ts) || Date.now() - ts > 5 * 60 * 1000 || ts > Date.now() + 60 * 1000) {
+        return NextResponse.json(
+          { success: false, error: 'Signature expired or invalid timestamp' },
+          { status: 401 }
+        );
+      }
+
+      // Verify signature
+      const message = `Register burner ${burnerWallet} for ${mainWallet} at ${timestamp}`;
+      let isValid = false;
+      try {
+        isValid = await verifyMessage({
+          address: mainWallet as `0x${string}`,
+          message,
+          signature: signature as `0x${string}`,
+        });
+      } catch {
+        return NextResponse.json(
+          { success: false, error: 'Invalid signature format' },
+          { status: 401 }
+        );
+      }
+
+      if (!isValid) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid signature' },
+          { status: 401 }
+        );
+      }
     }
 
     // Validate private key format (we store as-is; encryption validates presence of 0x prefix too)
@@ -90,29 +161,6 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: 'Invalid private key format' },
         { status: 400 }
-      );
-    }
-
-    // Verify signature
-    const message = `Register burner ${burnerWallet} for ${mainWallet} at ${timestamp}`;
-    let isValid = false;
-    try {
-      isValid = await verifyMessage({
-        address: mainWallet as `0x${string}`,
-        message,
-        signature: signature as `0x${string}`,
-      });
-    } catch {
-      return NextResponse.json(
-        { success: false, error: 'Invalid signature format' },
-        { status: 401 }
-      );
-    }
-
-    if (!isValid) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid signature' },
-        { status: 401 }
       );
     }
 

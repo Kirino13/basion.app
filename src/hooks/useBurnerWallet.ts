@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { useAccount, useSignMessage } from 'wagmi';
-import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
+import { RPC_URL, CONTRACT_ADDRESS, MAX_GAS_GWEI } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 
 // Safe localStorage helpers (handle private browsing mode, etc.)
@@ -54,6 +54,7 @@ let cachedGasPrice: bigint | null = null;
 let gasPriceLastFetch: number = 0;
 const GAS_PRICE_CACHE_MS = 30000; // Cache gas price for 30 seconds
 const FIXED_GAS_LIMIT = 100000n; // Fixed gas limit for tap() - we know it uses ~50k
+const MAX_GAS_PRICE_WEI = BigInt(Math.round(MAX_GAS_GWEI * 1e9)); // 0.005 gwei -> 5,000,000 wei
 
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
@@ -350,12 +351,33 @@ export function useBurnerWallet() {
     setHasBurner(false);
   }, [mainWallet]);
 
-  // Register burner with backend (called after creating new burner)
-  // SECURITY: Signs message to prove ownership, server encrypts the key
-  const registerBurnerWithBackend = useCallback(async (burnerAddr: string, privateKey: string): Promise<void> => {
+  // Register burner with backend (to enable cross-device restore)
+  // SECURITY:
+  // - Preferred: txHash-based proof (no signMessage prompts; works reliably in Base App)
+  // - Fallback: signature-based proof (EOA wallets)
+  const registerBurnerWithBackend = useCallback(
+    async (
+      burnerAddr: string,
+      privateKey: string,
+      options?: { txHash?: string }
+    ): Promise<void> => {
     if (!mainWallet) return;
     
     try {
+      if (options?.txHash) {
+        await fetch('/api/register-burner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mainWallet: mainWallet,
+            burnerWallet: burnerAddr,
+            privateKey: privateKey, // Server will encrypt this
+            txHash: options.txHash,
+          }),
+        });
+        return;
+      }
+
       const timestamp = Date.now().toString();
       const message = `Register burner ${burnerAddr} for ${mainWallet} at ${timestamp}`;
       
@@ -410,9 +432,16 @@ export function useBurnerWallet() {
     // Get gas price - cache for 30 seconds to avoid RPC calls
     const now = Date.now();
     if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
-      const feeData = await provider.getFeeData();
-      cachedGasPrice = feeData.gasPrice || 1000000000n; // fallback 1 gwei
+      // Use the same source as the "gas too high" gate: eth_gasPrice.
+      // This keeps behavior consistent with MAX_GAS_GWEI.
+      const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
+      cachedGasPrice = BigInt(gasPriceHex);
       gasPriceLastFetch = now;
+    }
+
+    // Safety: enforce the 0.005 gwei rule at send-time too.
+    if (cachedGasPrice > MAX_GAS_PRICE_WEI) {
+      throw new Error('Gas too high');
     }
 
     // Use current nonce and increment for next tx
@@ -442,9 +471,10 @@ export function useBurnerWallet() {
       const provider = getProvider();
       
       const balance = await provider.getBalance(burnerData.address);
-      const feeData = await provider.getFeeData();
+      const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
+      const gasPriceWei = BigInt(gasPriceHex);
       const estimatedGas = BigInt(50000 + count * 5000);
-      const gasCost = estimatedGas * (feeData.gasPrice || 0n);
+      const gasCost = estimatedGas * gasPriceWei;
       
       if (balance < gasCost) {
         throw new Error(`Insufficient gas for ${count} taps`);

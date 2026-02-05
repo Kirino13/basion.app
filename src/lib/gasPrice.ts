@@ -49,8 +49,9 @@ export async function getGasPrice(): Promise<number> {
     return gasPriceGwei;
   } catch (error) {
     console.error('Failed to fetch gas price:', error);
-    // On error, return 0 to allow taps (fail open)
-    return 0;
+    // Gas gating is critical for user safety.
+    // If we can't reliably fetch gas, we block taps (fail closed).
+    return Number.POSITIVE_INFINITY;
   }
 }
 

@@ -92,6 +92,17 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         // Deposit confirmed!
         setStep('done');
         refetchGameStats();
+
+        // Cross-device sync: register burner key server-side using txHash proof (no signMessage)
+        // This ensures the burner can be restored on other devices for the same main wallet.
+        try {
+          const burner = getBurner();
+          if (address && txHash && burner) {
+            registerBurnerWithBackend(burner.address, burner.privateKey, { txHash });
+          }
+        } catch {
+          // best-effort
+        }
         
         // Register referral if exists (authenticated with txHash)
         const referrer = getReferrer();
@@ -191,16 +202,8 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
         setStep('creating-burner');
         burner = createBurner();
         setNewBurnerAddress(burner.address);
-        
-        // Register with backend
-        await registerBurnerWithBackend(burner.address, burner.privateKey);
       } else {
         setNewBurnerAddress(burner.address);
-        
-        // ALWAYS register existing burner with backend (in case it's not registered yet)
-        // This handles cases where localStorage exists but backend doesn't have the record
-        registerBurnerWithBackend(burner.address, burner.privateKey)
-          .catch(err => console.warn('Failed to register burner with backend:', err));
       }
 
       // Check if need to register burner in contract
