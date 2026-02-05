@@ -178,9 +178,10 @@ export function useBurnerWallet() {
 
       // Ensure the burner is also stored on server for cross-device restore.
       // Best-effort: never block taps if this check fails.
-      if (safeLocalStorage.getItem(serverSyncedMarkerKey) === '1') {
+      const hasSyncedMarker = safeLocalStorage.getItem(serverSyncedMarkerKey) === '1';
+      if (hasSyncedMarker) {
+        // Optimistically hide banner, but still verify server state once per session.
         setNeedsServerSync(false);
-        return;
       }
 
       if (checkedServerSyncStatus.has(normalizedMain) && refreshTrigger === 0) {
@@ -200,10 +201,13 @@ export function useBurnerWallet() {
               setNeedsServerSync(false);
             } else {
               // Server has a different burner (or stale record) -> require manual sync
+              safeLocalStorage.removeItem(serverSyncedMarkerKey);
               setNeedsServerSync(true);
             }
             return;
           }
+          // No burner on server -> require manual sync
+          safeLocalStorage.removeItem(serverSyncedMarkerKey);
           setNeedsServerSync(true);
         } catch {
           // ignore
