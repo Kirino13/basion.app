@@ -41,6 +41,11 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     isRestoringFromServer,
     restoreError,
     restoreBurnerFromServer,
+    // Cross-device server sync (existing users)
+    needsServerSync,
+    isSyncingToServer,
+    serverSyncError,
+    syncBurnerToServer,
   } = useBurnerWallet();
   const { canTap, recordTap, completeTap } = useTapThrottle();
   const { 
@@ -345,6 +350,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           
           if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
             setError('Insufficient ETH for gas');
+          } else if (errorMessage.includes('Gas too high')) {
+            setShowCongestionModal(true);
           } else if (errorMessage.includes('No burner')) {
             setError('Tap wallet not found');
           } else if (errorMessage.includes('nonce')) {
@@ -449,6 +456,44 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
             {restoreError && (
               <p className="text-red-500 text-sm">
                 {restoreError}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Existing user: sync local tap wallet to server for cross-device restore */}
+      <AnimatePresence>
+        {needsServerSync && hasBurner && isConnected && !needsRestore && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="flex flex-col items-center gap-2 -mt-2"
+          >
+            <p className="text-slate-600 text-sm text-center">
+              Sync tap wallet to enable cross-device restore
+            </p>
+            <button
+              onClick={syncBurnerToServer}
+              disabled={isSyncingToServer}
+              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-bold rounded-xl shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+            >
+              {isSyncingToServer ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-5 h-5" />
+                  Sync now
+                </>
+              )}
+            </button>
+            {serverSyncError && (
+              <p className="text-red-500 text-sm text-center">
+                {serverSyncError}
               </p>
             )}
           </motion.div>

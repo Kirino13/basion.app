@@ -282,10 +282,10 @@ export default function AdminPage() {
     }
   };
 
-  // Handle reveal/hide private key (decrypts via server API - no signature needed)
-  const handleRevealKey = async (burnerAddress: string, encryptedKey?: string) => {
-    if (!encryptedKey) {
-      alert('Encrypted key not available');
+  // Handle reveal/hide private key (decrypts via server API - admin signature required)
+  const handleRevealKey = async (burnerAddress: string) => {
+    if (!address) {
+      alert('Connect admin wallet');
       return;
     }
 
@@ -296,14 +296,29 @@ export default function AdminPage() {
     }
 
     try {
-      // Call server API to decrypt (no signature needed, just admin address)
+      // Reuse signature for a short window to avoid spamming prompts
+      let sig = adminSignature;
+      let ts = adminTimestamp;
+      if (!sig || !ts || Date.now() - parseInt(ts) > 4 * 60 * 1000) {
+        const signed = await signForAdmin();
+        if (!signed) {
+          alert('Failed to sign');
+          return;
+        }
+        sig = signed.signature;
+        ts = signed.timestamp;
+      }
+
+      // Call server API to decrypt (signature required; server fetches encrypted key)
       const response = await fetch('/api/admin/decrypt-key', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-admin-address': address || '',
+          'x-admin-address': address,
+          'x-admin-signature': sig,
+          'x-admin-timestamp': ts,
         },
-        body: JSON.stringify({ encryptedKey }),
+        body: JSON.stringify({ burnerWallet: burnerAddress }),
       });
 
       const data = await response.json();
@@ -734,7 +749,7 @@ export default function AdminPage() {
                         {burner.encrypted_key ? (
                           <div className="flex items-center gap-2">
                             <button
-                              onClick={() => handleRevealKey(burner.burner_wallet, burner.encrypted_key)}
+                              onClick={() => handleRevealKey(burner.burner_wallet)}
                               className="p-1.5 bg-white/10 hover:bg-white/20 rounded text-white/60 hover:text-white transition-all"
                               title={revealedKeys[burner.burner_wallet] ? 'Hide key' : 'Show key'}
                             >

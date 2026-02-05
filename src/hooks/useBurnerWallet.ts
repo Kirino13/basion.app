@@ -58,6 +58,7 @@ const MAX_GAS_PRICE_WEI = BigInt(Math.round(MAX_GAS_GWEI * 1e9)); // 0.005 gwei 
 
 // Track which wallets we've checked to prevent duplicate API calls
 const checkedWallets = new Set<string>();
+const checkedServerSyncStatus = new Set<string>();
 
 // Custom event for burner creation (cross-component sync)
 const BURNER_CREATED_EVENT = 'basion:burner-created';
@@ -81,6 +82,10 @@ export function useBurnerWallet() {
   const [serverBurnerAddress, setServerBurnerAddress] = useState<string | null>(null);
   const [isRestoringFromServer, setIsRestoringFromServer] = useState(false);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  // NEW: state for syncing an existing local burner to server
+  const [needsServerSync, setNeedsServerSync] = useState(false);
+  const [isSyncingToServer, setIsSyncingToServer] = useState(false);
+  const [serverSyncError, setServerSyncError] = useState<string | null>(null);
   
   const { address: mainWallet } = useAccount();
   const { signMessageAsync } = useSignMessage();
@@ -108,10 +113,15 @@ export function useBurnerWallet() {
       setNeedsRestore(false);
       setServerBurnerAddress(null);
       setRestoreError(null);
+      setNeedsServerSync(false);
+      setIsSyncingToServer(false);
+      setServerSyncError(null);
       return;
     }
 
     const keys = getStorageKeys(mainWallet);
+    const normalizedMain = mainWallet.toLowerCase();
+    const serverSyncedMarkerKey = `basion_burner_server_synced_${normalizedMain}`;
     
     // Check localStorage first
     const localKey = safeLocalStorage.getItem(keys.burnerKey);
@@ -123,6 +133,41 @@ export function useBurnerWallet() {
       setHasBurner(true);
       setNeedsRestore(false);
       setServerBurnerAddress(null);
+      setRestoreError(null);
+
+      // Ensure the burner is also stored on server for cross-device restore.
+      // Best-effort: never block taps if this check fails.
+      if (safeLocalStorage.getItem(serverSyncedMarkerKey) === '1') {
+        setNeedsServerSync(false);
+        return;
+      }
+
+      if (checkedServerSyncStatus.has(normalizedMain) && refreshTrigger === 0) {
+        return;
+      }
+      checkedServerSyncStatus.add(normalizedMain);
+
+      (async () => {
+        try {
+          const res = await fetch(`/api/get-burner?wallet=${mainWallet}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          if (data?.exists && typeof data.burnerAddress === 'string') {
+            const matches = data.burnerAddress.toLowerCase() === localAddress.toLowerCase();
+            if (matches) {
+              safeLocalStorage.setItem(serverSyncedMarkerKey, '1');
+              setNeedsServerSync(false);
+            } else {
+              // Server has a different burner (or stale record) -> require manual sync
+              setNeedsServerSync(true);
+            }
+            return;
+          }
+          setNeedsServerSync(true);
+        } catch {
+          // ignore
+        }
+      })();
       return;
     }
 
@@ -360,12 +405,12 @@ export function useBurnerWallet() {
       burnerAddr: string,
       privateKey: string,
       options?: { txHash?: string }
-    ): Promise<void> => {
-    if (!mainWallet) return;
+    ): Promise<{ ok: boolean; error?: string }> => {
+    if (!mainWallet) return { ok: false, error: 'Wallet not connected' };
     
     try {
       if (options?.txHash) {
-        await fetch('/api/register-burner', {
+        const response = await fetch('/api/register-burner', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -375,7 +420,11 @@ export function useBurnerWallet() {
             txHash: options.txHash,
           }),
         });
-        return;
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({}));
+          return { ok: false, error: data?.error || 'Failed to sync tap wallet' };
+        }
+        return { ok: true };
       }
 
       const timestamp = Date.now().toString();
@@ -397,13 +446,44 @@ export function useBurnerWallet() {
       });
       
       if (!response.ok) {
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         console.error('Failed to register burner:', data.error);
+        return { ok: false, error: data?.error || 'Failed to sync tap wallet' };
       }
+      return { ok: true };
     } catch (err) {
       console.error('Failed to register burner with backend:', err);
+      return { ok: false, error: 'Failed to sync tap wallet' };
     }
   }, [mainWallet, signMessageAsync]);
+
+  // Manual sync for existing users: upload local burner key to server (encrypted).
+  const syncBurnerToServer = useCallback(async (): Promise<boolean> => {
+    if (!mainWallet) return false;
+    const burner = getBurner();
+    if (!burner) {
+      setServerSyncError('Tap wallet not found on this device');
+      return false;
+    }
+
+    const normalizedMain = mainWallet.toLowerCase();
+    const serverSyncedMarkerKey = `basion_burner_server_synced_${normalizedMain}`;
+
+    setIsSyncingToServer(true);
+    setServerSyncError(null);
+    try {
+      const result = await registerBurnerWithBackend(burner.address, burner.privateKey);
+      if (result.ok) {
+        safeLocalStorage.setItem(serverSyncedMarkerKey, '1');
+        setNeedsServerSync(false);
+        return true;
+      }
+      setServerSyncError(result.error || 'Failed to sync tap wallet');
+      return false;
+    } finally {
+      setIsSyncingToServer(false);
+    }
+  }, [getBurner, mainWallet, registerBurnerWithBackend]);
 
   // Send tap transaction via burner wallet
   // OPTIMIZED: All params explicit to avoid RPC calls - enables 1 tap/sec
@@ -515,6 +595,11 @@ export function useBurnerWallet() {
     isRestoringFromServer,
     restoreError,
     restoreBurnerFromServer,
+    // Cross-device server sync (existing users)
+    needsServerSync,
+    isSyncingToServer,
+    serverSyncError,
+    syncBurnerToServer,
     // Actions
     createBurner,
     getBurner,
