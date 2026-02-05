@@ -65,7 +65,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        await sdk.actions.ready();
+        // In some hosts (including preview tools), the bridge/context can take
+        // a couple seconds to come online. Wait for Mini App context first.
+        let inMiniApp = false;
+        for (let i = 0; i < 5; i++) {
+          inMiniApp = await sdk.isInMiniApp();
+          if (inMiniApp) break;
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        if (!inMiniApp) return;
+
+        // Avoid hanging forever if host bridge is unavailable.
+        await Promise.race([
+          sdk.actions.ready({ disableNativeGestures: true }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('miniapp ready timeout')), 5000)),
+        ]);
       } catch {
         // No-op outside of Mini App environments
       }
