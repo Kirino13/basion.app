@@ -124,8 +124,34 @@ export function useBurnerWallet() {
     const serverSyncedMarkerKey = `basion_burner_server_synced_${normalizedMain}`;
     
     // Check localStorage first
-    const localKey = safeLocalStorage.getItem(keys.burnerKey);
-    const localAddress = safeLocalStorage.getItem(keys.burnerAddress);
+    let localKey = safeLocalStorage.getItem(keys.burnerKey);
+    let localAddress = safeLocalStorage.getItem(keys.burnerAddress);
+
+    // Backward-compat: migrate legacy (non wallet-specific) storage keys.
+    // Older versions stored burner under:
+    // - basion_burner_key
+    // - basion_burner_address
+    // If present, copy to wallet-specific keys for the connected main wallet.
+    if (!localKey) {
+      const legacyKey = safeLocalStorage.getItem('basion_burner_key');
+      const legacyAddress = safeLocalStorage.getItem('basion_burner_address');
+      if (legacyKey) {
+        try {
+          const walletObj = new ethers.Wallet(legacyKey);
+          const addr = legacyAddress || walletObj.address;
+          safeLocalStorage.setItem(keys.burnerKey, legacyKey);
+          safeLocalStorage.setItem(keys.burnerAddress, addr);
+          safeLocalStorage.removeItem('basion_burner_key');
+          safeLocalStorage.removeItem('basion_burner_address');
+          localKey = legacyKey;
+          localAddress = addr;
+        } catch {
+          // If legacy key is invalid, clear it to avoid repeated failures.
+          safeLocalStorage.removeItem('basion_burner_key');
+          safeLocalStorage.removeItem('basion_burner_address');
+        }
+      }
+    }
     
     if (localKey && localAddress) {
       // Burner exists locally - all good
