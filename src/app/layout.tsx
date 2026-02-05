@@ -19,15 +19,15 @@ export const metadata: Metadata = {
   title: 'Basion.app - Tap to Earn on Base',
   description: 'Tap-to-earn game on Base Network. Buy taps, earn points, climb the leaderboard!',
   other: {
-    // Mini App embed metadata (used by Base App / Farcaster clients)
-    // Docs: https://docs.base.org/mini-apps/quickstart/migrate-existing-apps
-    'fc:miniapp': JSON.stringify({
+    // Embed metadata (used by Base App / Farcaster clients)
+    // Docs: https://docs.base.org/cookbook/minikit/add-frame-metadata
+    'fc:frame': JSON.stringify({
       version: 'next',
       imageUrl: 'https://basion.app/favicon.png',
       button: {
         title: 'Play Now',
         action: {
-          type: 'launch_miniapp',
+          type: 'launch_frame',
           name: 'Basion Tap',
           url: 'https://basion.app',
           splashImageUrl: 'https://basion.app/favicon.png',
