@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import { verifyMessage } from 'viem';
+import { createPublicClient, http } from 'viem';
+import { base } from 'viem/chains';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
+import { RPC_URL } from '@/config/constants';
 
 function toHex(bytes: Uint8Array): `0x${string}` {
   return (`0x${Buffer.from(bytes).toString('hex')}`) as `0x${string}`;
@@ -134,23 +136,31 @@ export async function POST(request: Request) {
 
     // Verify signature - proves ownership of wallet
     const message = `Restore Basion burner for ${wallet} at ${timestamp}`;
+    const normalizedSig = normalizeSignature(signature);
+    if (!normalizedSig) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid signature format' },
+        { status: 401 }
+      );
+    }
+
+    // IMPORTANT: Use publicClient.verifyMessage (supports EOAs + Smart Accounts).
+    const client = createPublicClient({
+      chain: base,
+      transport: http(RPC_URL),
+    });
+
     let isValid = false;
     try {
-      const normalizedSig = normalizeSignature(signature);
-      if (!normalizedSig) {
-        return NextResponse.json(
-          { success: false, error: 'Invalid signature format' },
-          { status: 401 }
-        );
-      }
-      isValid = await verifyMessage({
+      isValid = await client.verifyMessage({
         address: wallet as `0x${string}`,
         message,
         signature: normalizedSig,
       });
-    } catch {
+    } catch (e) {
+      console.error('verifyMessage failed:', e);
       return NextResponse.json(
-        { success: false, error: 'Invalid signature format' },
+        { success: false, error: 'Invalid signature' },
         { status: 401 }
       );
     }
