@@ -127,6 +127,21 @@ export function useBurnerWallet() {
     let localKey = safeLocalStorage.getItem(keys.burnerKey);
     let localAddress = safeLocalStorage.getItem(keys.burnerAddress);
 
+    // If key exists but address missing, derive address from key (older states / partial writes).
+    if (localKey && !localAddress) {
+      try {
+        const walletObj = new ethers.Wallet(localKey);
+        localAddress = walletObj.address;
+        safeLocalStorage.setItem(keys.burnerAddress, localAddress);
+      } catch {
+        // Invalid local key, clear it
+        safeLocalStorage.removeItem(keys.burnerKey);
+        safeLocalStorage.removeItem(keys.burnerAddress);
+        localKey = null;
+        localAddress = null;
+      }
+    }
+
     // Backward-compat: migrate legacy (non wallet-specific) storage keys.
     // Older versions stored burner under:
     // - basion_burner_key
