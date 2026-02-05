@@ -63,19 +63,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // Mini App: hide splash screen once UI is ready
   useEffect(() => {
-    let isMounted = true;
     (async () => {
       try {
-        const inMiniApp = await sdk.isInMiniApp();
-        if (!isMounted || !inMiniApp) return;
         await sdk.actions.ready();
       } catch {
         // No-op outside of Mini App environments
       }
     })();
-    return () => {
-      isMounted = false;
-    };
   }, []);
 
   return (
