@@ -31,6 +31,7 @@ export async function GET() {
     splashImageUrl: `${url}/favicon.png`,
     splashBackgroundColor: '#000000',
     homeUrl: url,
+    webhookUrl: `${url}/api/webhook`,
     primaryCategory: 'games',
     tags: ['tap', 'game', 'base', 'onchain', 'basion'],
     heroImageUrl: `${url}/favicon.png`,
