@@ -1,5 +1,6 @@
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const runtime = 'nodejs';
 
 function withValidProperties<T extends Record<string, unknown>>(properties: T): Partial<T> {
   return Object.fromEntries(
@@ -7,8 +8,13 @@ function withValidProperties<T extends Record<string, unknown>>(properties: T): 
   ) as Partial<T>;
 }
 
+function env(key: string): string {
+  // Bracket access prevents build-time env inlining.
+  return process.env[key] ?? '';
+}
+
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_URL ?? 'https://basion.app';
+  const url = env('NEXT_PUBLIC_URL') || 'https://basion.app';
 
   // Base / Farcaster clients read this endpoint for:
   // - domain ownership proof (accountAssociation)
@@ -38,9 +44,9 @@ export async function GET() {
 
   const body = {
     accountAssociation: {
-      header: process.env.FARCASTER_HEADER ?? '',
-      payload: process.env.FARCASTER_PAYLOAD ?? '',
-      signature: process.env.FARCASTER_SIGNATURE ?? '',
+      header: env('FARCASTER_HEADER'),
+      payload: env('FARCASTER_PAYLOAD'),
+      signature: env('FARCASTER_SIGNATURE'),
     },
     // Docs/clients are in transition: some expect `miniapp`, some `frame`.
     // Returning both keeps Base Preview + discovery happy.
