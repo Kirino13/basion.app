@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useAccount, useSignMessage } from 'wagmi';
 import { RPC_URL, CONTRACT_ADDRESS, MAX_GAS_GWEI } from '@/config/constants';
@@ -56,10 +56,6 @@ const GAS_PRICE_CACHE_MS = 30000; // Cache gas price for 30 seconds
 const FIXED_GAS_LIMIT = 100000n; // Fixed gas limit for tap() - we know it uses ~50k
 const MAX_GAS_PRICE_WEI = BigInt(Math.round(MAX_GAS_GWEI * 1e9)); // 0.005 gwei -> 5,000,000 wei
 
-// Track which wallets we've checked to prevent duplicate API calls
-const checkedWallets = new Set<string>();
-const checkedServerSyncStatus = new Set<string>();
-
 // Custom event for burner creation (cross-component sync)
 const BURNER_CREATED_EVENT = 'basion:burner-created';
 
@@ -73,6 +69,10 @@ function getStorageKeys(walletAddress: string) {
 }
 
 export function useBurnerWallet() {
+  // Per-hook-instance caches (avoid cross-component state desync)
+  const checkedWalletsRef = useRef<Set<string>>(new Set());
+  const checkedServerSyncStatusRef = useRef<Set<string>>(new Set());
+
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -184,10 +184,10 @@ export function useBurnerWallet() {
         setNeedsServerSync(false);
       }
 
-      if (checkedServerSyncStatus.has(normalizedMain) && refreshTrigger === 0) {
+      if (checkedServerSyncStatusRef.current.has(normalizedMain) && refreshTrigger === 0) {
         return;
       }
-      checkedServerSyncStatus.add(normalizedMain);
+      checkedServerSyncStatusRef.current.add(normalizedMain);
 
       (async () => {
         try {
@@ -218,13 +218,13 @@ export function useBurnerWallet() {
 
     // No local burner - try to restore from Supabase
     // Only check once per wallet per session (unless refreshTrigger changed)
-    if (checkedWallets.has(mainWallet.toLowerCase()) && refreshTrigger === 0) {
+    if (checkedWalletsRef.current.has(mainWallet.toLowerCase()) && refreshTrigger === 0) {
       // Already checked, maintain current state
       return;
     }
 
     // Mark as checked to prevent duplicate API calls
-    checkedWallets.add(mainWallet.toLowerCase());
+    checkedWalletsRef.current.add(mainWallet.toLowerCase());
     
     // Try to restore from backend
     setIsRestoring(true);
