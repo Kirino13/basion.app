@@ -20,7 +20,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
     const fetchLeaderboard = async () => {
       try {
         setError(null);
-        const res = await fetch('/api/leaderboard?limit=100', { 
+        const res = await fetch('/api/leaderboard?limit=10', {
           signal: abortController.signal 
         });
         
@@ -61,7 +61,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
   const fetchLeaderboard = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/leaderboard?limit=100');
+      const res = await fetch('/api/leaderboard?limit=10');
       
       if (!res.ok) {
         throw new Error(`HTTP error: ${res.status}`);
@@ -148,7 +148,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
 
       {/* List — scrollable, smaller on mobile */}
       <div 
-        className="overflow-x-hidden px-2 lg:px-3 py-1 lg:py-2 leaderboard-scroll flex flex-col gap-1 lg:gap-2 max-h-[180px] lg:max-h-[600px] overflow-y-auto"
+        className="overflow-x-hidden px-2 lg:px-3 py-1 lg:py-2 leaderboard-scroll flex flex-col gap-1 lg:gap-2 max-h-[180px] lg:max-h-none overflow-y-auto lg:overflow-y-visible"
       >
         {error ? (
           <div className="flex flex-col items-center justify-center h-full text-center py-6 lg:py-8">
@@ -167,7 +167,7 @@ const Leaderboard: React.FC<LeaderboardProps> = () => {
             <p className="text-slate-400 text-[10px] lg:text-xs mt-1">Be the first!</p>
           </div>
         ) : (
-          entries.map((item) => {
+          entries.slice(0, 10).map((item) => {
             const isTop3 = item.rank <= 3;
             return (
               <div
