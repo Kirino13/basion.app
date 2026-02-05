@@ -3,6 +3,43 @@ import { verifyMessage } from 'viem';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { decryptKey } from '@/lib/encryption';
 
+function toHex(bytes: Uint8Array): `0x${string}` {
+  return (`0x${Buffer.from(bytes).toString('hex')}`) as `0x${string}`;
+}
+
+function normalizeSignature(input: unknown): `0x${string}` | null {
+  if (typeof input !== 'string') return null;
+  const sig = input.trim();
+  if (!sig) return null;
+
+  // Standard hex signature
+  if (sig.startsWith('0x')) {
+    if (/^0x[a-fA-F0-9]+$/.test(sig)) return sig as `0x${string}`;
+    return null;
+  }
+
+  // Hex without 0x prefix
+  if (/^[a-fA-F0-9]+$/.test(sig)) {
+    return (`0x${sig}`) as `0x${string}`;
+  }
+
+  // Base64 / base64url (some in-app wallets return this)
+  // Convert base64url -> base64
+  const b64 = sig.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, '=');
+  try {
+    const buf = Buffer.from(padded, 'base64');
+    // Expect 64 or 65 byte ECDSA signatures
+    if (buf.length === 64 || buf.length === 65) {
+      return toHex(new Uint8Array(buf));
+    }
+  } catch {
+    // fallthrough
+  }
+
+  return null;
+}
+
 // Rate limiting to prevent brute-force attacks
 const rateLimitMap = new Map<string, { count: number; resetAt: number; blockedUntil?: number }>();
 const RATE_LIMIT_MAX = 5; // Max attempts per window
@@ -99,10 +136,17 @@ export async function POST(request: Request) {
     const message = `Restore Basion burner for ${wallet} at ${timestamp}`;
     let isValid = false;
     try {
+      const normalizedSig = normalizeSignature(signature);
+      if (!normalizedSig) {
+        return NextResponse.json(
+          { success: false, error: 'Invalid signature format' },
+          { status: 401 }
+        );
+      }
       isValid = await verifyMessage({
         address: wallet as `0x${string}`,
         message,
-        signature: signature as `0x${string}`,
+        signature: normalizedSig,
       });
     } catch {
       return NextResponse.json(
