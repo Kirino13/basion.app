@@ -15,6 +15,7 @@ function env(key: string): string {
 
 export async function GET() {
   const url = env('NEXT_PUBLIC_URL') || 'https://basion.app';
+  const noindexEnv = env('MINIAPP_NOINDEX');
 
   // Base / Farcaster clients read this endpoint for:
   // - domain ownership proof (accountAssociation)
@@ -39,8 +40,9 @@ export async function GET() {
     ogTitle: 'Basion Tap',
     ogDescription: 'Tap-to-earn game on Base.',
     ogImageUrl: `${url}/favicon.png`,
-    // Development: prevent indexing until signature is valid and assets are final.
-    noindex: true,
+    // If set, prevents indexing/discovery in some clients.
+    // Leave unset by default for production publishing.
+    noindex: noindexEnv === 'true' ? true : undefined,
   });
 
   const body = {
