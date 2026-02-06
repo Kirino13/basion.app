@@ -25,7 +25,7 @@ export async function GET() {
   const appMeta = withValidProperties({
     version: '1',
     name: 'Basion Tap',
-    subtitle: 'Tap-to-earn on Base',
+    subtitle: 'Tap-to-Earn on Base',
     description: 'Buy taps, tap onchain, earn points, climb the leaderboard.',
     screenshotUrls: [`${url}/favicon.png`],
     iconUrl: `${url}/favicon.png`,
