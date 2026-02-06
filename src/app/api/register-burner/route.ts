@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createPublicClient, http, verifyMessage } from 'viem';
+import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { encryptKey } from '@/lib/encryption';
@@ -11,6 +11,41 @@ const rateLimitMap = new Map<string, { count: number; resetAt: number; blockedUn
 const RATE_LIMIT_MAX = 15; // allow a few retries during onboarding
 const RATE_LIMIT_WINDOW = 60000; // 1 minute
 const BLOCK_DURATION = 300000; // 5 minutes
+
+function toHex(bytes: Uint8Array): `0x${string}` {
+  return (`0x${Buffer.from(bytes).toString('hex')}`) as `0x${string}`;
+}
+
+function normalizeSignature(input: unknown): `0x${string}` | null {
+  if (typeof input !== 'string') return null;
+  const sig = input.trim();
+  if (!sig) return null;
+
+  // Standard hex signature
+  if (sig.startsWith('0x')) {
+    if (/^0x[a-fA-F0-9]+$/.test(sig)) return sig as `0x${string}`;
+    return null;
+  }
+
+  // Hex without 0x prefix
+  if (/^[a-fA-F0-9]+$/.test(sig)) {
+    return (`0x${sig}`) as `0x${string}`;
+  }
+
+  // Base64 / base64url (some in-app wallets return this)
+  const b64 = sig.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, '=');
+  try {
+    const buf = Buffer.from(padded, 'base64');
+    if (buf.length === 64 || buf.length === 65) {
+      return toHex(new Uint8Array(buf));
+    }
+  } catch {
+    // fallthrough
+  }
+
+  return null;
+}
 
 function checkRateLimit(ip: string): { allowed: boolean; retryAfter?: number } {
   const now = Date.now();
@@ -80,6 +115,12 @@ export async function POST(request: Request) {
       );
     }
 
+    // Used for txHash verification & smart-account message verification (ERC-1271).
+    const client = createPublicClient({
+      chain: base,
+      transport: http(RPC_URL),
+    });
+
     // Authenticate request:
     // - Preferred: txHash proof (works in Base App even if signMessage is unreliable)
     // - Fallback: signature proof (EOA wallets)
@@ -88,11 +129,6 @@ export async function POST(request: Request) {
       if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) {
         return NextResponse.json({ success: false, error: 'Invalid txHash format' }, { status: 400 });
       }
-
-      const client = createPublicClient({
-        chain: base,
-        transport: http(RPC_URL),
-      });
 
       try {
         const tx = await client.getTransaction({ hash: hash as `0x${string}` });
@@ -133,18 +169,22 @@ export async function POST(request: Request) {
 
       // Verify signature
       const message = `Register burner ${burnerWallet} for ${mainWallet} at ${timestamp}`;
+      const normalizedSig = normalizeSignature(signature);
+      if (!normalizedSig) {
+        return NextResponse.json({ success: false, error: 'Invalid signature format' }, { status: 401 });
+      }
+
       let isValid = false;
       try {
-        isValid = await verifyMessage({
+        // IMPORTANT: verifyMessage Action supports EOAs + smart accounts (ERC-1271).
+        isValid = await client.verifyMessage({
           address: mainWallet as `0x${string}`,
           message,
-          signature: signature as `0x${string}`,
+          signature: normalizedSig,
         });
-      } catch {
-        return NextResponse.json(
-          { success: false, error: 'Invalid signature format' },
-          { status: 401 }
-        );
+      } catch (e) {
+        console.error('Signature verification failed:', e);
+        return NextResponse.json({ success: false, error: 'Invalid signature' }, { status: 401 });
       }
 
       if (!isValid) {

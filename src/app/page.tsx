@@ -170,7 +170,7 @@ function HomeContent() {
                 className="bg-white hover:bg-white/90 px-2 rounded-xl font-bold text-sm text-slate-900 shadow-xl shadow-blue-900/10 transition-all active:scale-95 flex items-center justify-center gap-1 h-[44px]"
               >
                 <CircleDollarSign size={18} className="text-blue-600" />
-                <span>$</span>
+                <span>Deposit</span>
               </button>
 
               <button
