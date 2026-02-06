@@ -72,6 +72,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
         w.__BASION_MINIAPP_CLIENT_FID__ = null;
         w.__BASION_MINIAPP_PLATFORM_TYPE__ = null;
 
+        // Strong heuristic for Base App / Mini App hosts:
+        // Base App is a React Native client that typically injects ReactNativeWebView.
+        // If we are on mobile and this bridge exists, treat as Base App early so the
+        // first API calls can include x-basion-client without waiting for sdk.context.
+        const ua = navigator.userAgent || '';
+        const isMobileUA = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+        const hasRNBridge =
+          typeof (window as unknown as { ReactNativeWebView?: { postMessage?: unknown } }).ReactNativeWebView?.postMessage ===
+          'function';
+        if (isMobileUA && hasRNBridge) {
+          w.__BASION_MINIAPP__ = true;
+          w.__BASION_BASEAPP__ = true;
+          window.dispatchEvent(new Event('basion:client-env-changed'));
+        }
+
         // In some hosts (including preview tools), the bridge/context can take
         // a couple seconds to come online. Wait for Mini App context first.
         let inMiniApp = false;
@@ -85,7 +100,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
         // Mark environment for other components (used for Base App boost detection)
         w.__BASION_MINIAPP__ = true;
         try {
-          const ctx = await sdk.context;
+          // Avoid hanging forever if host bridge is flaky
+          const ctx = await Promise.race([
+            sdk.context,
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('miniapp context timeout')), 2500)),
+          ]);
           const clientFid = (ctx as { client?: { clientFid?: number } })?.client?.clientFid;
           const platformType = (ctx as { client?: { platformType?: string } })?.client?.platformType;
           w.__BASION_MINIAPP_CLIENT_FID__ = typeof clientFid === 'number' ? clientFid : null;
@@ -94,11 +113,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
           // Default behavior: any *mobile* Mini App host is treated as Base App for bonus purposes.
           // This matches the requirement "тапы с телефона/эмулятора в Base App" and avoids desktop.
           const isMobileMiniApp = platformType === 'mobile';
-          w.__BASION_BASEAPP__ = isMobileMiniApp;
+          // Warpcast is commonly clientFid=9152; exclude it from Base App bonus by default.
+          const isWarpcast = clientFid === 9152;
+          w.__BASION_BASEAPP__ = isMobileMiniApp && !isWarpcast;
         } catch {
           // If context isn't available, still keep Mini App flag.
           // Base App hosts are mobile; fall back to UA.
-          const ua = navigator.userAgent || '';
           w.__BASION_BASEAPP__ = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
         } finally {
           window.dispatchEvent(new Event('basion:client-env-changed'));
