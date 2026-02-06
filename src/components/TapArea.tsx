@@ -14,6 +14,23 @@ interface TapAreaProps {
   onTapSuccess?: () => void;
 }
 
+function isProbablyBaseAppClient(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const w = window as unknown as Record<string, unknown>;
+  if (w.__BASION_BASEAPP__ === true) return true;
+  if (w.__BASION_MINIAPP__ === true) return true;
+
+  const ua = navigator.userAgent || '';
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+  if (!isMobile) return false;
+
+  const hasCoinbaseUa = /CoinbaseWallet|Coinbase Wallet|CBW|BaseApp/i.test(ua);
+  const eth = (window as unknown as { ethereum?: { isCoinbaseWallet?: boolean } }).ethereum;
+  const hasCoinbaseProvider = Boolean(eth?.isCoinbaseWallet);
+  return hasCoinbaseUa || hasCoinbaseProvider;
+}
+
 const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const [bubbles, setBubbles] = useState<FloatingText[]>([]);
   const [localTaps, setLocalTaps] = useState(0);
@@ -98,9 +115,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     
     try {
       // Sync to Supabase - server calculates points with boost
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(isProbablyBaseAppClient() ? { 'x-basion-client': 'base-app' } : {}),
+      };
       const response = await fetch('/api/sync-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           mainWallet: address,
           txHash: hashToUse,
@@ -270,9 +291,13 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           // IMPORTANT: Sync points to DB FIRST (this calculates points with boost)
           if (address) {
             try {
+              const headers: HeadersInit = {
+                'Content-Type': 'application/json',
+                ...(isProbablyBaseAppClient() ? { 'x-basion-client': 'base-app' } : {}),
+              };
               const syncRes = await fetch('/api/sync-user', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                   mainWallet: address,
                   txHash: txHash,

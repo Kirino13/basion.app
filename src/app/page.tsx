@@ -7,6 +7,27 @@ import { useAccount } from 'wagmi';
 import { CloudBackground, WalletConnect, TapArea, DepositModal, Leaderboard } from '@/components';
 import { useBasionContract, useReferral, useUserPoints } from '@/hooks';
 
+function isProbablyBaseAppClient(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const w = window as unknown as Record<string, unknown>;
+  if (w.__BASION_BASEAPP__ === true) return true;
+  if (w.__BASION_MINIAPP__ === true) return true;
+
+  const ua = navigator.userAgent || '';
+  const isMobile = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+  if (!isMobile) return false;
+
+  // UA signal (best-effort; configurable on server as well)
+  const hasCoinbaseUa = /CoinbaseWallet|Coinbase Wallet|CBW|BaseApp/i.test(ua);
+
+  // Provider signal (Base/Coinbase in-app browser often injects Coinbase provider)
+  const eth = (window as unknown as { ethereum?: { isCoinbaseWallet?: boolean } }).ethereum;
+  const hasCoinbaseProvider = Boolean(eth?.isCoinbaseWallet);
+
+  return hasCoinbaseUa || hasCoinbaseProvider;
+}
+
 function HomeContent() {
   const { address, isConnected } = useAccount();
   const { tapBalance, refetchGameStats } = useBasionContract();
@@ -34,17 +55,38 @@ function HomeContent() {
   const [isApplyingCode, setIsApplyingCode] = useState(false);
   const [boostMessage, setBoostMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
-  // Fetch boost percent when address changes
-  useEffect(() => {
-    if (address) {
-      fetch(`/api/boost?address=${address}`)
-        .then(res => res.json())
-        .then(data => setBoostPercent(data.boostPercent ?? 0))
-        .catch(() => setBoostPercent(0));
-    } else {
+  const fetchBoost = useCallback(async () => {
+    if (!address) {
       setBoostPercent(null);
+      return;
+    }
+
+    try {
+      const headers: HeadersInit = isProbablyBaseAppClient()
+        ? { 'x-basion-client': 'base-app' }
+        : {};
+      const res = await fetch(`/api/boost?address=${address}`, { headers });
+      const data = await res.json();
+
+      // Show effective boost when available (Base App = base + 30)
+      setBoostPercent(data.effectiveBoostPercent ?? data.boostPercent ?? 0);
+    } catch {
+      setBoostPercent(0);
     }
   }, [address]);
+
+  // Fetch boost percent when address changes
+  useEffect(() => {
+    fetchBoost();
+  }, [fetchBoost]);
+
+  // Re-fetch boost when client env (Mini App/Base App) becomes known
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handler = () => fetchBoost();
+    window.addEventListener('basion:client-env-changed', handler);
+    return () => window.removeEventListener('basion:client-env-changed', handler);
+  }, [fetchBoost]);
 
   // Clear boost message after 3 seconds
   useEffect(() => {
@@ -71,7 +113,8 @@ function HomeContent() {
       const data = await res.json();
       
       if (data.ok) {
-        setBoostPercent(data.boostPercent);
+        // boost/redeem returns base boost from DB; refetch /api/boost to show effective boost per client.
+        await fetchBoost();
         setBoostCode('');
         setBoostMessage({ type: 'success', text: `+${data.addedBoost}% applied!` });
       } else {

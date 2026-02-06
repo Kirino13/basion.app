@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { getBaseAppBonusPercent, getEffectiveBoostPercent } from '@/lib/baseApp';
 
 // Track processed txHashes to prevent replay (in-memory, resets on deploy)
 const processedTxHashes = new Set<string>();
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
     }
 
     const normalizedWallet = mainWallet.toLowerCase();
+    const baseAppBonusPercent = getBaseAppBonusPercent(request.headers);
 
     // Check if already processed (idempotent)
     if (processedTxHashes.has(txHash.toLowerCase())) {
@@ -55,7 +57,10 @@ export async function POST(request: Request) {
           .select('total_points, premium_points, standard_points, taps_remaining, boost_percent')
           .eq('main_wallet', normalizedWallet)
           .single();
-        
+
+        const baseBoostPercent = Number(userData?.boost_percent) || 0;
+        const effectiveBoostPercent = getEffectiveBoostPercent(baseBoostPercent, request.headers);
+
         return NextResponse.json({ 
           success: true, 
           cached: true,
@@ -65,7 +70,11 @@ export async function POST(request: Request) {
             standard: userData?.standard_points || 0,
           },
           tapBalance: userData?.taps_remaining || 0,
-          boostPercent: userData?.boost_percent || 0,
+          // Backward-compat: boostPercent = effective boost used for points.
+          boostPercent: effectiveBoostPercent,
+          baseBoostPercent,
+          baseAppBonusPercent,
+          effectiveBoostPercent,
         });
       }
       return NextResponse.json({ success: true, cached: true });
@@ -116,10 +125,11 @@ export async function POST(request: Request) {
 
     const currentPremium = Number(userData?.premium_points) || 0;
     const currentStandard = Number(userData?.standard_points) || 0;
-    const boostPercent = Number(userData?.boost_percent) || 0;
+    const baseBoostPercent = Number(userData?.boost_percent) || 0;
+    const effectiveBoostPercent = getEffectiveBoostPercent(baseBoostPercent, request.headers);
 
     // Calculate points with boost: 1 × (1 + boost/100) per tap
-    const pointsPerTap = 1 * (1 + boostPercent / 100);
+    const pointsPerTap = 1 * (1 + effectiveBoostPercent / 100);
     const pointsEarned = pointsPerTap * validatedTapCount;
 
     // Add to premium points (single tap mode from UI)
@@ -153,7 +163,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ 
       success: true,
       pointsEarned,
-      boostPercent,
+      // Backward-compat: boostPercent = effective boost used for points.
+      boostPercent: effectiveBoostPercent,
+      baseBoostPercent,
+      baseAppBonusPercent,
+      effectiveBoostPercent,
       points: {
         total: newTotal,
         premium: newPremium,

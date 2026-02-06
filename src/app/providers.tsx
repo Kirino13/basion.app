@@ -65,6 +65,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
+        const w = window as unknown as Record<string, unknown>;
+        // Default: not a Mini App until proven otherwise
+        w.__BASION_MINIAPP__ = false;
+        w.__BASION_BASEAPP__ = false;
+        w.__BASION_MINIAPP_CLIENT_FID__ = null;
+        w.__BASION_MINIAPP_PLATFORM_TYPE__ = null;
+
         // In some hosts (including preview tools), the bridge/context can take
         // a couple seconds to come online. Wait for Mini App context first.
         let inMiniApp = false;
@@ -74,6 +81,28 @@ export function Providers({ children }: { children: React.ReactNode }) {
           await new Promise((r) => setTimeout(r, 500));
         }
         if (!inMiniApp) return;
+
+        // Mark environment for other components (used for Base App boost detection)
+        w.__BASION_MINIAPP__ = true;
+        try {
+          const ctx = await sdk.context;
+          const clientFid = (ctx as { client?: { clientFid?: number } })?.client?.clientFid;
+          const platformType = (ctx as { client?: { platformType?: string } })?.client?.platformType;
+          w.__BASION_MINIAPP_CLIENT_FID__ = typeof clientFid === 'number' ? clientFid : null;
+          w.__BASION_MINIAPP_PLATFORM_TYPE__ = typeof platformType === 'string' ? platformType : null;
+
+          // Default behavior: any *mobile* Mini App host is treated as Base App for bonus purposes.
+          // This matches the requirement "тапы с телефона/эмулятора в Base App" and avoids desktop.
+          const isMobileMiniApp = platformType === 'mobile';
+          w.__BASION_BASEAPP__ = isMobileMiniApp;
+        } catch {
+          // If context isn't available, still keep Mini App flag.
+          // Base App hosts are mobile; fall back to UA.
+          const ua = navigator.userAgent || '';
+          w.__BASION_BASEAPP__ = /iPhone|iPad|iPod|Android|Mobile/i.test(ua);
+        } finally {
+          window.dispatchEvent(new Event('basion:client-env-changed'));
+        }
 
         // Avoid hanging forever if host bridge is unavailable.
         await Promise.race([
