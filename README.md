@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎮 Basion — Tap-to-Earn on Base
 
-## Getting Started
+> Onboarding the next wave of users to Base through simple, addictive gameplay.
 
-First, run the development server:
+## 🚀 What is Basion?
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Basion is a Tap-to-Earn game built natively on Base. Users tap to earn points, with every action recorded as an on-chain transaction. Simple mechanics, real blockchain activity.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**Our thesis:** The easiest way to onboard millions to crypto is through games they already understand — tap, earn, repeat.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 📊 Traction (First Week)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Metric | Value |
+|--------|-------|
+| Users | 25 |
+| Total Transactions | 60,000+ |
+| Avg Transactions/User | 2,400 |
+| Status | Live MVP |
 
-## Learn More
+**Every tap = on-chain transaction on Base.**
 
-To learn more about Next.js, take a look at the following resources:
+## ✨ Why Base?
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- **Low fees** make micro-transactions viable for gaming
+- **Fastest-growing L2** in the Ethereum ecosystem  
+- **Coinbase ecosystem** = path to mainstream adoption
+- **Builder-friendly** culture aligned with our vision
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🔗 Links
 
-## Deploy on Vercel
+- 🌐 **App:** [basion.app](https://basion.app)
+- 💻 **GitHub:** [github.com/Kirino13/basion.app](https://github.com/Kirino13/basion.app)
+- 🐦 **Twitter:** [@basion_tap](https://x.com/basion_tap)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🛠 Tech Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Frontend:** Next.js, TypeScript, React
+- **Blockchain:** Base (Ethereum L2)
+- **Deployment:** Vercel
+
+## 🗺 Roadmap
+
+- [x] MVP Launch
+- [x] On-chain transaction system
+- [x] Referral system
+- [x] Leaderboards & competitions
+- [ ] Reward distribution mechanism
+- [x] Base app
+
+## 🤝 Looking For
+
+- Feedback from the Base team
+- Grants to scale user acquisition
+- Ecosystem support & visibility
+
+---
+
+**Built with 💙 on Base**
