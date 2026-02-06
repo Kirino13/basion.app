@@ -72,6 +72,9 @@ export function useBurnerWallet() {
   // Per-hook-instance caches (avoid cross-component state desync)
   const checkedWalletsRef = useRef<Set<string>>(new Set());
   const checkedServerSyncStatusRef = useRef<Set<string>>(new Set());
+  // Protect against races between initial /api/get-burner check and a manual Sync.
+  // If Sync succeeds, we bump this token so any older in-flight check can't re-show the banner.
+  const serverSyncCheckTokenRef = useRef(0);
 
   const [burnerAddress, setBurnerAddress] = useState<string | null>(null);
   const [hasBurner, setHasBurner] = useState(false);
@@ -190,10 +193,13 @@ export function useBurnerWallet() {
       checkedServerSyncStatusRef.current.add(normalizedMain);
 
       (async () => {
+        const token = ++serverSyncCheckTokenRef.current;
         try {
           const res = await fetch(`/api/get-burner?wallet=${mainWallet}`);
           if (!res.ok) return;
           const data = await res.json();
+          // Ignore stale results if a newer check/sync happened.
+          if (token !== serverSyncCheckTokenRef.current) return;
           if (data?.exists && typeof data.burnerAddress === 'string') {
             const matches = data.burnerAddress.toLowerCase() === localAddress.toLowerCase();
             if (matches) {
@@ -521,6 +527,8 @@ export function useBurnerWallet() {
       if (result.ok) {
         safeLocalStorage.setItem(serverSyncedMarkerKey, '1');
         setNeedsServerSync(false);
+        // Invalidate any earlier in-flight server check that could re-show the banner.
+        serverSyncCheckTokenRef.current++;
         return true;
       }
       setServerSyncError(result.error || 'Failed to sync tap wallet');
