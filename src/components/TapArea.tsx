@@ -371,20 +371,60 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           setLocalTaps(prev => prev + 1);
           
           // Analyze error
-          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          
-          if (errorMessage.includes('insufficient funds') || errorMessage.includes('gas')) {
-            setError('Insufficient ETH for gas');
-          } else if (errorMessage.includes('Gas too high')) {
+          let errorMessage = 'Unknown error';
+          if (err instanceof Error) {
+            errorMessage = err.message;
+          } else if (typeof err === 'string') {
+            errorMessage = err;
+          } else {
+            try {
+              errorMessage = JSON.stringify(err);
+            } catch {
+              errorMessage = String(err);
+            }
+          }
+
+          const m = (errorMessage || '').toLowerCase();
+
+          if (m.includes('gas too high')) {
             setShowCongestionModal(true);
-          } else if (errorMessage.includes('No burner')) {
-            setError('Tap wallet not found');
-          } else if (errorMessage.includes('nonce')) {
-            // Nonce error - don't show, just retry on next tap
-          } else if (errorMessage.includes('No taps')) {
+            return;
+          }
+
+          if (m.includes('insufficient funds') || m.includes('insufficient gas')) {
+            setError('Tap wallet is out of ETH for gas — deposit to refill');
+            return;
+          }
+
+          if (m.includes('no burner') || m.includes('burner')) {
+            setError('Tap wallet not found — open Deposit to create/sync it');
+            return;
+          }
+
+          if (m.includes('no taps') || m.includes('out of taps') || m.includes('no taps remaining')) {
             setError('Out of taps! Buy more.');
             setLocalTaps(0);
+            return;
           }
+
+          // Common RPC/transient failures that previously looked like "tap works, but no tx"
+          if (
+            m.includes('nonce') ||
+            m.includes('replacement') ||
+            m.includes('underpriced') ||
+            m.includes('already known')
+          ) {
+            setError('Transaction pending/nonce issue — wait a few seconds and try again');
+            return;
+          }
+
+          if (m.includes('failed to fetch') || m.includes('network') || m.includes('timeout')) {
+            setError('Network/RPC error — please try again');
+            return;
+          }
+
+          // Fallback
+          setError('Tap failed — please try again');
         });
     },
     [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
@@ -525,8 +565,8 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         )}
       </AnimatePresence>
 
-      {/* Only show: connect wallet, banned, deposit messages */}
-      {error && (error.includes('deposit') || error.includes('taps') || error.includes('Connect') || error.includes('banned')) && (
+      {/* Show tap errors (don’t hide failures behind the +1 bubble) */}
+      {error && (
         <motion.p 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}

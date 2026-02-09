@@ -557,36 +557,103 @@ export function useBurnerWallet() {
       cachedGasPrice = null;
     }
 
-    // Get nonce - fetch once from RPC, then increment locally
-    if (currentNonce === null) {
-      currentNonce = await provider.getTransactionCount(cachedWallet.address, 'pending');
+    // TypeScript safety: after initialization above, these must exist.
+    // Capture them into local constants so nested helpers can rely on non-null values.
+    if (!cachedWallet || !cachedContract) {
+      throw new Error('Failed to initialize tap wallet');
     }
+    const wallet = cachedWallet;
+    const contract = cachedContract;
 
-    // Get gas price - cache for 30 seconds to avoid RPC calls
-    const now = Date.now();
-    if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
-      // Use the same source as the "gas too high" gate: eth_gasPrice.
-      // This keeps behavior consistent with MAX_GAS_GWEI.
-      const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
-      cachedGasPrice = BigInt(gasPriceHex);
-      gasPriceLastFetch = now;
+    const trySend = async (): Promise<ethers.TransactionResponse> => {
+      // Get nonce - fetch once from RPC, then increment locally
+      if (currentNonce === null) {
+        currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
+      }
+
+      // Get gas price - cache for 30 seconds to avoid RPC calls
+      const now = Date.now();
+      if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
+        // Use the same source as the "gas too high" gate: eth_gasPrice.
+        // This keeps behavior consistent with MAX_GAS_GWEI.
+        const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
+        cachedGasPrice = BigInt(gasPriceHex);
+        gasPriceLastFetch = now;
+      }
+
+      // Safety: enforce the 0.005 gwei rule at send-time too.
+      if (cachedGasPrice > MAX_GAS_PRICE_WEI) {
+        throw new Error('Gas too high');
+      }
+
+      // IMPORTANT: only advance local nonce after the tx is successfully broadcast.
+      const nonce = currentNonce;
+
+      // Send with ALL params explicit - NO additional RPC calls needed
+      const tx = await contract.tap({
+        nonce,
+        gasLimit: FIXED_GAS_LIMIT,
+        gasPrice: cachedGasPrice,
+      });
+
+      currentNonce = nonce + 1;
+      return tx;
+    };
+
+    try {
+      return await trySend();
+    } catch (err) {
+      const code = (err as { code?: unknown } | null)?.code;
+      let message = 'Unknown error';
+      if (err instanceof Error) {
+        message = err.message;
+      } else if (typeof err === 'string') {
+        message = err;
+      } else {
+        try {
+          message = JSON.stringify(err);
+        } catch {
+          message = String(err);
+        }
+      }
+      const m = (message || '').toLowerCase();
+
+      // If we failed to send, our local nonce/gas caches may be stale. Reset them.
+      // Retry ONCE for common transient errors.
+      const shouldRetryOnce =
+        !m.includes('insufficient funds') &&
+        !m.includes('gas too high') &&
+        !m.includes('no burner') &&
+        !m.includes('no taps') &&
+        (m.includes('nonce') ||
+          m.includes('replacement') ||
+          m.includes('underpriced') ||
+          m.includes('already known') ||
+          m.includes('timeout') ||
+          m.includes('failed to fetch') ||
+          m.includes('network') ||
+          (typeof code === 'string' && (code === 'NONCE_EXPIRED' || code === 'REPLACEMENT_UNDERPRICED')));
+
+      if (shouldRetryOnce) {
+        currentNonce = null;
+        cachedGasPrice = null;
+        try {
+          return await trySend();
+        } catch (err2) {
+          // Ensure next tap re-syncs with RPC
+          currentNonce = null;
+          cachedGasPrice = null;
+          throw err2;
+        }
+      }
+
+      // Ensure next tap re-syncs with RPC for nonce-related failures
+      if (m.includes('nonce') || (typeof code === 'string' && code === 'NONCE_EXPIRED')) {
+        currentNonce = null;
+      }
+
+      throw err;
     }
-
-    // Safety: enforce the 0.005 gwei rule at send-time too.
-    if (cachedGasPrice > MAX_GAS_PRICE_WEI) {
-      throw new Error('Gas too high');
-    }
-
-    // Use current nonce and increment for next tx
-    const nonce = currentNonce++;
-
-    // Send with ALL params explicit - NO additional RPC calls needed
-    const tx = await cachedContract.tap({
-      nonce,
-      gasLimit: FIXED_GAS_LIMIT,
-      gasPrice: cachedGasPrice,
-    });
-    return tx;
   }, [getBurner]);
 
   // Send multiple taps at once (for batch mode)
