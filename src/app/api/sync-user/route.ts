@@ -1,42 +1,31 @@
 import { NextResponse } from 'next/server';
-import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { RPC_URL, CONTRACT_ADDRESS } from '@/config/constants';
-import { BASION_ABI } from '@/config/abi';
 import { getBaseAppBonusPercent, getEffectiveBoostPercent } from '@/lib/baseApp';
-
-// Track processed txHashes to prevent replay (in-memory, resets on deploy)
-const processedTxHashes = new Set<string>();
+import { applyTapTxToDb } from '@/lib/tapSync';
 
 /**
  * POST /api/sync-user
- * 
- * Called after each tap from frontend to add points with boost.
- * Points are calculated: 1 × (1 + boost_percent/100) per tap.
- * 
+ *
+ * Called from the frontend after each tap to credit points with boost.
+ *
  * Body: {
  *   mainWallet: string   - User's main wallet address
- *   txHash: string       - Transaction hash for authentication
- *   tapCount?: number    - Number of taps (default 1)
+ *   txHash: string       - Transaction hash for verification
+ *   tapCount?: number    - Ignored (derived from on-chain calldata)
  * }
+ *
+ * Idempotent: calling twice with the same txHash returns the same result.
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { mainWallet, txHash, tapCount = 1 } = body;
+    const { mainWallet, txHash } = body;
 
     if (!mainWallet) {
       return NextResponse.json({ error: 'Missing mainWallet' }, { status: 400 });
     }
-
     if (!txHash) {
       return NextResponse.json({ error: 'Missing txHash' }, { status: 401 });
-    }
-
-    // Validate tapCount - must be positive finite number, max 100
-    const validatedTapCount = Number(tapCount);
-    if (!Number.isFinite(validatedTapCount) || validatedTapCount <= 0 || validatedTapCount > 100) {
-      return NextResponse.json({ error: 'Invalid tapCount (must be 1-100)' }, { status: 400 });
     }
 
     // Validate wallet format
@@ -44,136 +33,51 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 });
     }
 
-    const normalizedWallet = mainWallet.toLowerCase();
-    const baseAppBonusPercent = getBaseAppBonusPercent(request.headers);
-
-    // Check if already processed (idempotent)
-    if (processedTxHashes.has(txHash.toLowerCase())) {
-      // Return cached points from database
-      const supabase = getSupabaseAdmin();
-      if (supabase) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('total_points, premium_points, standard_points, taps_remaining, boost_percent')
-          .eq('main_wallet', normalizedWallet)
-          .single();
-
-        const baseBoostPercent = Number(userData?.boost_percent) || 0;
-        const effectiveBoostPercent = getEffectiveBoostPercent(baseBoostPercent, request.headers);
-
-        return NextResponse.json({ 
-          success: true, 
-          cached: true,
-          points: {
-            total: userData?.total_points || 0,
-            premium: userData?.premium_points || 0,
-            standard: userData?.standard_points || 0,
-          },
-          tapBalance: userData?.taps_remaining || 0,
-          // Backward-compat: boostPercent = effective boost used for points.
-          boostPercent: effectiveBoostPercent,
-          baseBoostPercent,
-          baseAppBonusPercent,
-          effectiveBoostPercent,
-        });
-      }
-      return NextResponse.json({ success: true, cached: true });
-    }
-
-    // Verify transaction
-    try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL);
-      const receipt = await provider.getTransactionReceipt(txHash);
-      
-      if (!receipt) {
-        return NextResponse.json({ error: 'Transaction not found' }, { status: 400 });
-      }
-
-      if (receipt.status !== 1) {
-        return NextResponse.json({ error: 'Transaction failed' }, { status: 400 });
-      }
-
-      if (receipt.to?.toLowerCase() !== CONTRACT_ADDRESS.toLowerCase()) {
-        return NextResponse.json({ error: 'Invalid contract' }, { status: 400 });
-      }
-
-      // Mark as processed
-      processedTxHashes.add(txHash.toLowerCase());
-      
-      // Cleanup old entries
-      if (processedTxHashes.size > 10000) {
-        const entries = Array.from(processedTxHashes);
-        entries.slice(0, 5000).forEach(h => processedTxHashes.delete(h));
-      }
-    } catch (verifyError) {
-      console.error('TX verification error:', verifyError);
-      return NextResponse.json({ error: 'Failed to verify transaction' }, { status: 400 });
-    }
-
     const supabase = getSupabaseAdmin();
-
     if (!supabase) {
       return NextResponse.json({ success: true, message: 'Database not configured' });
     }
 
-    // Get user's current data including boost
+    const normalizedWallet = mainWallet.toLowerCase();
+
+    // Get user's current boost from DB
     const { data: userData } = await supabase
       .from('users')
-      .select('total_points, premium_points, standard_points, boost_percent')
+      .select('boost_percent')
       .eq('main_wallet', normalizedWallet)
       .single();
 
-    const currentPremium = Number(userData?.premium_points) || 0;
-    const currentStandard = Number(userData?.standard_points) || 0;
     const baseBoostPercent = Number(userData?.boost_percent) || 0;
+    const baseAppBonusPercent = getBaseAppBonusPercent(request.headers);
     const effectiveBoostPercent = getEffectiveBoostPercent(baseBoostPercent, request.headers);
 
-    // Calculate points with boost: 1 × (1 + boost/100) per tap
-    const pointsPerTap = 1 * (1 + effectiveBoostPercent / 100);
-    const pointsEarned = pointsPerTap * validatedTapCount;
+    // --- Core: verify tx + idempotent insert + atomic increment ---
+    const result = await applyTapTxToDb({
+      txHash,
+      mainWallet,
+      effectiveBoostPercent,
+      source: 'ui',
+      supabase,
+    });
 
-    // Add to premium points (single tap mode from UI)
-    const newPremium = currentPremium + pointsEarned;
-    const newTotal = newPremium + currentStandard;
-
-    // Get tap balance from contract
-    let tapBalance = 0;
-    try {
-      const provider = new ethers.JsonRpcProvider(RPC_URL);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
-      tapBalance = Number(await contract.tapBalance(mainWallet));
-    } catch (err) {
-      console.warn('Failed to read tap balance:', err);
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    // Update database with new points
-    const { error } = await supabase.from('users').upsert(
-      {
-        main_wallet: normalizedWallet,
-        premium_points: newPremium,
-        total_points: newTotal,
-        taps_remaining: tapBalance,
-        last_tap_at: new Date().toISOString(),
-      },
-      { onConflict: 'main_wallet' }
-    );
-
-    if (error) throw error;
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      pointsEarned,
-      // Backward-compat: boostPercent = effective boost used for points.
+      cached: result.alreadyProcessed,
+      pointsEarned: result.pointsEarned,
       boostPercent: effectiveBoostPercent,
       baseBoostPercent,
       baseAppBonusPercent,
       effectiveBoostPercent,
       points: {
-        total: newTotal,
-        premium: newPremium,
-        standard: currentStandard,
+        total: result.totalPoints,
+        premium: result.premiumPoints,
+        standard: result.standardPoints,
       },
-      tapBalance,
+      tapBalance: result.tapBalance,
     });
   } catch (error) {
     console.error('Sync user error:', error);

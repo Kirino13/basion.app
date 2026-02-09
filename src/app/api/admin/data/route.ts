@@ -92,9 +92,39 @@ export async function GET(request: Request) {
       });
     }
 
+    // Integrity diagnostics: tap_events table stats (if available)
+    let integrity = null;
+    try {
+      // Total synced tap events
+      const { count: tapEventCount } = await supabase
+        .from('tap_events')
+        .select('*', { count: 'exact', head: true });
+
+      // Total points credited via tap_events
+      const { data: tapEventStats } = await supabase
+        .rpc('get_tap_event_stats');
+
+      // Sum of all user total_points
+      const dbTotalPoints = (users || []).reduce(
+        (sum: number, u: { total_points?: number }) => sum + (Number(u.total_points) || 0),
+        0
+      );
+
+      integrity = {
+        tapEventsCount: tapEventCount ?? 0,
+        tapEventsPointsSum: tapEventStats?.[0]?.total_points ?? null,
+        dbTotalPoints,
+        note: 'If tapEventsPointsSum < dbTotalPoints, some points were credited outside tap_events (legacy sync or manual).',
+      };
+    } catch {
+      // tap_events table might not exist yet — that's ok
+      integrity = { tapEventsCount: 0, note: 'tap_events table not found — run migration_tap_events.sql' };
+    }
+
     return NextResponse.json({
       users: users || [],
       burners: sortedBurners,
+      integrity,
     });
   } catch (error) {
     console.error('Admin data error:', error);

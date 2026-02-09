@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAccount, useSignMessage } from 'wagmi';
 import { WalletConnect } from '@/components';
 import { ADMIN_WALLET } from '@/config/constants';
-import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Ban, DollarSign, Percent, Zap } from 'lucide-react';
+import { Shield, Users, Wallet, ArrowDownToLine, RefreshCw, AlertTriangle, Eye, EyeOff, Copy, Check, Download, Ban, DollarSign, Percent, Zap, Database } from 'lucide-react';
 
 interface UserData {
   main_wallet: string;
@@ -60,8 +60,16 @@ export default function AdminPage() {
   const [totalDepositUsd, setTotalDepositUsd] = useState(0);
   const [totalCommission, setTotalCommission] = useState(0);
   const [totalPoints, setTotalPoints] = useState(0);
-  const [totalTaps, setTotalTaps] = useState(0);
+  const [totalTapsRemaining, setTotalTapsRemaining] = useState(0);
   const [bannedCount, setBannedCount] = useState(0);
+  
+  // Integrity diagnostics
+  const [integrity, setIntegrity] = useState<{
+    tapEventsCount: number;
+    tapEventsPointsSum?: number | null;
+    dbTotalPoints?: number;
+    note?: string;
+  } | null>(null);
 
   const isAdmin = address?.toLowerCase() === ADMIN_WALLET;
   
@@ -127,14 +135,19 @@ export default function AdminPage() {
       const depositTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.total_deposit_usd || 0), 0);
       const commissionTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.commission_points || 0), 0);
       const pointsTotal = usersData.reduce((sum: number, u: UserData) => sum + (Number(u.total_points) || 0), 0);
-      const tapsTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.taps_remaining || 0), 0);
+      const tapsRemainingTotal = usersData.reduce((sum: number, u: UserData) => sum + (u.taps_remaining || 0), 0);
       const banned = usersData.filter((u: UserData) => u.is_banned).length;
       
       setTotalDepositUsd(depositTotal);
       setTotalCommission(commissionTotal);
       setTotalPoints(pointsTotal);
-      setTotalTaps(tapsTotal);
+      setTotalTapsRemaining(tapsRemainingTotal);
       setBannedCount(banned);
+      
+      // Integrity data
+      if (data.integrity) {
+        setIntegrity(data.integrity);
+      }
     } catch (error) {
       console.error('Failed to fetch data:', error);
       setUsers([]);
@@ -513,11 +526,46 @@ export default function AdminPage() {
           <div className="bg-white/10 backdrop-blur-xl rounded-2xl p-6">
             <div className="flex items-center gap-3 mb-2">
               <Zap className="w-5 h-5 text-purple-400" />
-              <span className="text-white/60">Total Taps</span>
+              <span className="text-white/60">Taps Remaining</span>
             </div>
-            <p className="text-3xl font-bold text-white">{totalTaps.toLocaleString()}</p>
+            <p className="text-3xl font-bold text-white">{totalTapsRemaining.toLocaleString()}</p>
           </div>
         </div>
+
+        {/* Integrity Diagnostics */}
+        {integrity && (
+          <div className="bg-white/5 backdrop-blur-xl rounded-2xl p-6 mb-8 border border-white/10">
+            <div className="flex items-center gap-3 mb-4">
+              <Database className="w-5 h-5 text-blue-400" />
+              <h2 className="text-lg font-bold text-white">Sync Integrity</h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <p className="text-white/60 text-sm">Synced Tap Events</p>
+                <p className="text-xl font-bold text-white">{(integrity.tapEventsCount || 0).toLocaleString()}</p>
+              </div>
+              {integrity.tapEventsPointsSum != null && (
+                <div>
+                  <p className="text-white/60 text-sm">Points from Events</p>
+                  <p className="text-xl font-bold text-white">
+                    {Number(integrity.tapEventsPointsSum).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </p>
+                </div>
+              )}
+              {integrity.dbTotalPoints != null && (
+                <div>
+                  <p className="text-white/60 text-sm">DB Total Points</p>
+                  <p className="text-xl font-bold text-white">
+                    {Number(integrity.dbTotalPoints).toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </p>
+                </div>
+              )}
+            </div>
+            {integrity.note && (
+              <p className="text-white/40 text-xs mt-3">{integrity.note}</p>
+            )}
+          </div>
+        )}
 
         {/* Results */}
         {withdrawResult && (

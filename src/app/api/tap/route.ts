@@ -6,6 +6,7 @@ import { decryptKey } from '@/lib/encryption';
 import { isGasTooHigh } from '@/lib/gasPrice';
 import { CONTRACT_ADDRESS, RPC_URL, COMMISSION_WALLETS as RAW_WALLETS, COMMISSION_PERCENT, MAINTENANCE_MODE } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { applyTapTxToDb } from '@/lib/tapSync';
 
 // Normalize commission wallets to lowercase
 const COMMISSION_WALLETS = RAW_WALLETS.map(w => w.toLowerCase());
@@ -17,6 +18,7 @@ const OWNER_PRIVATE_KEY = process.env.OWNER_PRIVATE_KEY;
  * POST /api/tap
  * 
  * External API for bots to send taps.
+ * Now uses shared applyTapTxToDb for idempotent point crediting.
  * 
  * Body: {
  *   wallet: string      - Main wallet address
@@ -245,56 +247,17 @@ export async function POST(request: Request) {
       console.warn('Transaction sent but confirmation wait failed');
     }
 
-    // Calculate points with boost (off-chain decimal points)
+    // --- Use shared applyTapTxToDb for idempotent point crediting ---
     const boostPercent = userData?.boost_percent || 0;
-    const pointsPerTap = 1 * (1 + boostPercent / 100); // e.g., 30% boost = 1.3 points
-    const pointsEarned = pointsPerTap * tapCount;
-
-    // Get current points from database and add new points
-    let syncedPoints = { premium: 0, standard: 0, tapBalance: 0, totalPoints: 0, pointsEarned };
-    try {
-      // Read current points from DB
-      const { data: currentUser } = await supabase
-        .from('users')
-        .select('premium_points, standard_points, total_points')
-        .eq('main_wallet', normalizedWallet)
-        .single();
-
-      const currentPremium = Number(currentUser?.premium_points) || 0;
-      const currentStandard = Number(currentUser?.standard_points) || 0;
-      
-      // Add new points (premium for single taps, standard for batch)
-      const newPremium = tapCount === 1 ? currentPremium + pointsEarned : currentPremium;
-      const newStandard = tapCount > 1 ? currentStandard + pointsEarned : currentStandard;
-      const newTotal = newPremium + newStandard;
-
-      // Get tap balance from contract
-      const contractRead = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, provider);
-      const newTapBalance = await contractRead.tapBalance(wallet);
-
-      syncedPoints = {
-        premium: newPremium,
-        standard: newStandard,
-        tapBalance: Number(newTapBalance),
-        totalPoints: newTotal,
-        pointsEarned,
-      };
-
-      // Update database with new points
-      await supabase.from('users').upsert(
-        {
-          main_wallet: normalizedWallet,
-          premium_points: newPremium,
-          standard_points: newStandard,
-          total_points: newTotal,
-          taps_remaining: Number(newTapBalance),
-          last_tap_at: new Date().toISOString(),
-        },
-        { onConflict: 'main_wallet' }
-      );
-    } catch (syncError) {
-      console.warn('Auto-sync to DB failed:', syncError);
-    }
+    const result = await applyTapTxToDb({
+      txHash: tx.hash,
+      mainWallet: wallet,
+      effectiveBoostPercent: boostPercent,
+      source: 'api',
+      supabase,
+      skipReceiptVerify: true, // We just sent the tx, no need to re-verify
+      knownTapCount: tapCount,
+    });
 
     // Add commission to random admin wallet
     if (!COMMISSION_WALLETS.includes(normalizedWallet)) {
@@ -303,6 +266,7 @@ export async function POST(request: Request) {
         const randomIndex = Math.floor(Math.random() * COMMISSION_WALLETS.length);
         const targetWallet = COMMISSION_WALLETS[randomIndex];
 
+        // Atomic increment for commission too
         const { data: targetUser } = await supabase
           .from('users')
           .select('commission_points')
@@ -333,8 +297,14 @@ export async function POST(request: Request) {
       txHash: tx.hash,
       count: tapCount,
       burnerAddress: burnerData.burner_wallet,
-      points: syncedPoints,
-      pointsEarned: syncedPoints.pointsEarned,
+      points: {
+        premium: result.premiumPoints,
+        standard: result.standardPoints,
+        tapBalance: result.tapBalance,
+        totalPoints: result.totalPoints,
+        pointsEarned: result.pointsEarned,
+      },
+      pointsEarned: result.pointsEarned,
       boostPercent,
     });
 
