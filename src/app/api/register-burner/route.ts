@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createPublicClient, http } from 'viem';
 import { base } from 'viem/chains';
+import { ethers } from 'ethers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { encryptKey } from '@/lib/encryption';
 import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
@@ -115,6 +116,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // Prevent obvious foot-guns: burner must be distinct from main wallet.
+    if (normalizedMain === normalizedBurner) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid burner wallet (must differ from main wallet)' },
+        { status: 400 }
+      );
+    }
+
     // Used for txHash verification & smart-account message verification (ERC-1271).
     const client = createPublicClient({
       chain: base,
@@ -193,6 +202,40 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
+
+      // CRITICAL: Prevent overwriting server burner with a wrong local burner.
+      // Enforce that the provided burnerWallet matches the on-chain burner for this main wallet.
+      try {
+        const userInfo = await client.readContract({
+          address: CONTRACT_ADDRESS,
+          abi: BASION_ABI,
+          functionName: 'getUserInfo',
+          args: [normalizedMain as `0x${string}`],
+        });
+        const contractBurner = String((userInfo as readonly [unknown, unknown, unknown])[2] ?? '').toLowerCase();
+        if (!contractBurner || contractBurner === '0x0000000000000000000000000000000000000000') {
+          return NextResponse.json(
+            { success: false, error: 'No burner registered on contract' },
+            { status: 401 }
+          );
+        }
+        if (contractBurner !== normalizedBurner) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: 'Burner mismatch (server sync blocked). Use Restore to recover the correct burner wallet.',
+              onChainBurner: contractBurner,
+            },
+            { status: 401 }
+          );
+        }
+      } catch (e) {
+        console.error('Failed to verify on-chain burner (signature auth):', e);
+        return NextResponse.json(
+          { success: false, error: 'Failed to verify burner on contract' },
+          { status: 401 }
+        );
+      }
     }
 
     // Validate private key format (we store as-is; encryption validates presence of 0x prefix too)
@@ -200,6 +243,22 @@ export async function POST(request: Request) {
     if (!/^0x[a-fA-F0-9]{64}$/.test(pk)) {
       return NextResponse.json(
         { success: false, error: 'Invalid private key format' },
+        { status: 400 }
+      );
+    }
+
+    // Ensure private key corresponds to burnerWallet (prevents storing mismatched keys).
+    try {
+      const derived = new ethers.Wallet(pk).address.toLowerCase();
+      if (derived !== normalizedBurner) {
+        return NextResponse.json(
+          { success: false, error: 'Private key does not match burner wallet address' },
+          { status: 400 }
+        );
+      }
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid private key' },
         { status: 400 }
       );
     }
