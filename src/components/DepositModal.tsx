@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Wallet, Zap, Check, Loader2 } from 'lucide-react';
+import { X, Wallet, Zap, Check, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { parseEther } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { CONTRACT_ADDRESS, GAME_CONFIG, STORAGE_KEYS } from '@/config/constants';
@@ -27,8 +27,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
   const [error, setError] = useState<string | null>(null);
   const [newBurnerAddress, setNewBurnerAddress] = useState<string | null>(null);
 
-  const { createBurner, getBurner, hasBurner, registerBurnerWithBackend } = useBurnerWallet();
-  const { burner: contractBurner, refetchGameStats } = useBasionContract();
+  const {
+    createBurner,
+    getBurner,
+    registerBurnerWithBackend,
+    // Cross-device restore
+    needsRestore,
+    serverBurnerAddress,
+    isRestoringFromServer,
+    restoreError,
+    restoreBurnerFromServer,
+    isRestoring,
+  } = useBurnerWallet();
+  const { burner: contractBurner, refetchGameStats, isLoadingGameStats } = useBasionContract();
   
   const { writeContract, data: txHash, isPending: isWritePending, error: writeError, reset: resetWrite } = useWriteContract();
   
@@ -38,6 +49,19 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
 
   const packages = GAME_CONFIG.packages;
   const selectedPkg = packages[selectedPackage];
+
+  const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+  const normalizedContractBurner = (contractBurner || '').toLowerCase();
+  const burnerRegisteredInContract = Boolean(normalizedContractBurner) && normalizedContractBurner !== ZERO_ADDR;
+  const isContractBurnerUnknown = Boolean(address) && normalizedContractBurner === '';
+
+  const localBurner = getBurner();
+  const normalizedLocalBurner = (localBurner?.address || '').toLowerCase();
+  const localMatchesContract =
+    !burnerRegisteredInContract ||
+    (Boolean(normalizedLocalBurner) && normalizedLocalBurner === normalizedContractBurner);
+
+  const mustRestoreBeforeDeposit = burnerRegisteredInContract && !localMatchesContract;
   
   // Dynamic ETH amount based on current ETH price
   // Add 1% buffer for price fluctuation between calculation and transaction
@@ -192,10 +216,28 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
 
     setError(null);
 
+    if (isContractBurnerUnknown) {
+      setError(isLoadingGameStats ? 'Loading on-chain tap wallet status...' : 'Failed to load on-chain tap wallet status');
+      return;
+    }
+
     try {
       // Check if burner exists locally
       let burner = getBurner();
-      const burnerRegisteredInContract = contractBurner && contractBurner !== '0x0000000000000000000000000000000000000000';
+
+      // SAFETY: If a burner is already registered on-chain, do NOT allow deposit unless the local burner matches it.
+      // Otherwise the user can send funds to an inaccessible burner (lost/incorrect localStorage).
+      if (burnerRegisteredInContract) {
+        const localAddr = burner?.address?.toLowerCase();
+        if (!localAddr) {
+          setError('Tap wallet already registered — restore it before depositing');
+          return;
+        }
+        if (localAddr !== normalizedContractBurner) {
+          setError('Tap wallet mismatch — restore your wallet to continue');
+          return;
+        }
+      }
 
       if (!burner) {
         // Create new burner
@@ -276,9 +318,81 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
                   )}
                 </div>
 
+                {isContractBurnerUnknown && (
+                  <p className="text-white/60 text-sm text-center mb-3">
+                    {isLoadingGameStats ? 'Loading on-chain tap wallet status...' : 'Unable to load on-chain tap wallet status'}
+                  </p>
+                )}
+
+                {/* If burner already registered, force restore before deposit */}
+                {mustRestoreBeforeDeposit && (
+                  <div className="mb-4 p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/30">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-yellow-400 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-yellow-200 font-bold">Restore your tap wallet</p>
+                        <p className="text-white/70 text-sm mt-1">
+                          Your tap wallet is already registered on-chain. Restore it first, otherwise your deposit will
+                          fund a wallet you can’t access.
+                        </p>
+                        {normalizedContractBurner && normalizedContractBurner !== ZERO_ADDR && (
+                          <p className="text-white/40 text-xs mt-2 font-mono break-all">
+                            On-chain tap wallet: {normalizedContractBurner}
+                          </p>
+                        )}
+
+                        {isRestoring ? (
+                          <p className="text-white/60 text-sm mt-3">Checking server backup...</p>
+                        ) : needsRestore ? (
+                          <div className="mt-3 flex flex-col gap-2">
+                            <button
+                              onClick={restoreBurnerFromServer}
+                              disabled={isRestoringFromServer}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-400 text-white font-bold rounded-lg shadow-lg shadow-blue-600/30 transition-all active:scale-95"
+                            >
+                              {isRestoringFromServer ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                  Restoring...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="w-4 h-4" />
+                                  Restore Wallet
+                                </>
+                              )}
+                            </button>
+                            {serverBurnerAddress && (
+                              <p className="text-white/40 text-xs font-mono break-all">
+                                Server wallet: {serverBurnerAddress}
+                              </p>
+                            )}
+                            {restoreError && <p className="text-red-400 text-xs">{restoreError}</p>}
+                          </div>
+                        ) : (
+                          <p className="text-white/60 text-sm mt-3">
+                            No backup found on server. Use the device where you created the tap wallet, or contact
+                            support.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {step === 'select' && error && (
+                  <p className="text-red-400 text-sm text-center mb-3 break-words">{error}</p>
+                )}
+
                 <button
                   onClick={handleDeposit}
-                  disabled={isWritePending || isConfirming}
+                  disabled={
+                    isWritePending ||
+                    isConfirming ||
+                    mustRestoreBeforeDeposit ||
+                    isRestoringFromServer ||
+                    isContractBurnerUnknown
+                  }
                   className="w-full py-3 lg:py-4 bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 rounded-xl font-bold text-base lg:text-lg text-white shadow-lg shadow-blue-600/30 transform transition active:scale-95 border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isWritePending || isConfirming ? 'Processing...' : 'Confirm Purchase'}

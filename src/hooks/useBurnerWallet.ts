@@ -143,6 +143,21 @@ export function useBurnerWallet() {
         localKey = null;
         localAddress = null;
       }
+    } else if (localKey && localAddress) {
+      // If both exist but don't match, trust the private key and repair the stored address.
+      try {
+        const walletObj = new ethers.Wallet(localKey);
+        if (walletObj.address.toLowerCase() !== localAddress.toLowerCase()) {
+          localAddress = walletObj.address;
+          safeLocalStorage.setItem(keys.burnerAddress, localAddress);
+        }
+      } catch {
+        // Invalid local key, clear it
+        safeLocalStorage.removeItem(keys.burnerKey);
+        safeLocalStorage.removeItem(keys.burnerAddress);
+        localKey = null;
+        localAddress = null;
+      }
     }
 
     // Backward-compat: migrate legacy (non wallet-specific) storage keys.
@@ -206,9 +221,14 @@ export function useBurnerWallet() {
               safeLocalStorage.setItem(serverSyncedMarkerKey, '1');
               setNeedsServerSync(false);
             } else {
-              // Server has a different burner (or stale record) -> require manual sync
+              // Server has a different burner.
+              // SAFETY: do NOT encourage syncing a potentially wrong local burner.
+              // Require restore (server burner is canonical for cross-device recovery).
               safeLocalStorage.removeItem(serverSyncedMarkerKey);
-              setNeedsServerSync(true);
+              setNeedsServerSync(false);
+              setNeedsRestore(true);
+              setServerBurnerAddress(data.burnerAddress);
+              setRestoreError(null);
             }
             return;
           }
@@ -527,6 +547,10 @@ export function useBurnerWallet() {
       if (result.ok) {
         safeLocalStorage.setItem(serverSyncedMarkerKey, '1');
         setNeedsServerSync(false);
+        // If we previously showed "restore required" due to server mismatch, syncing fixes it.
+        setNeedsRestore(false);
+        setServerBurnerAddress(null);
+        setRestoreError(null);
         // Invalidate any earlier in-flight server check that could re-show the banner.
         serverSyncCheckTokenRef.current++;
         return true;

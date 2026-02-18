@@ -49,6 +49,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
   const boostSyncedRef = useRef(false);
 
   const { 
+    burnerAddress,
     hasBurner, 
     sendTap, 
     isRestoring,
@@ -69,12 +70,33 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
     tapBalance, 
     isConnected, 
     address, 
+    burner: contractBurner,
     refetchGameStats 
   } = useBasionContract();
   const { 
-    boostPercent, 
     refetchPoints 
   } = useUserPoints();
+
+  const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
+  const normalizedOnChainBurner = (contractBurner || '').toLowerCase();
+  const onChainHasBurner = Boolean(normalizedOnChainBurner) && normalizedOnChainBurner !== ZERO_ADDR;
+  const normalizedLocalBurner = (burnerAddress || '').toLowerCase();
+  const localMismatchOnChain =
+    onChainHasBurner &&
+    Boolean(normalizedLocalBurner) &&
+    normalizedLocalBurner !== normalizedOnChainBurner;
+  const mustRestore = onChainHasBurner && (!normalizedLocalBurner || localMismatchOnChain);
+  const normalizedServerBurner = (serverBurnerAddress || '').toLowerCase();
+  const serverMatchesOnChain =
+    onChainHasBurner &&
+    Boolean(normalizedServerBurner) &&
+    normalizedServerBurner === normalizedOnChainBurner;
+  const localMatchesOnChain =
+    onChainHasBurner &&
+    Boolean(normalizedLocalBurner) &&
+    normalizedLocalBurner === normalizedOnChainBurner;
+  const shouldShowRestore = mustRestore && needsRestore && serverMatchesOnChain;
+  const shouldOfferServerSync = !mustRestore && needsRestore && localMatchesOnChain && !serverMatchesOnChain;
 
   // Check if user is banned
   useEffect(() => {
@@ -190,6 +212,12 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
       
       // Clear previous error
       setError(null);
+
+      // If we need to restore (or are restoring), don't allow taps or deposit prompts.
+      // This prevents funding an inaccessible burner or tapping with a mismatched burner.
+      if (mustRestore || isRestoring || isRestoringFromServer) {
+        return;
+      }
 
       // Check if banned
       if (isBanned) {
@@ -427,10 +455,29 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
           setError('Tap failed — please try again');
         });
     },
-    [isConnected, hasBurner, localTaps, canTap, sendTap, recordTap, completeTap, refetchGameStats, refetchPoints, onOpenDeposit, scheduleSync, onTapSuccess, address, isBanned, referralBonusClaimed]
+    [
+      isConnected,
+      hasBurner,
+      localTaps,
+      canTap,
+      sendTap,
+      recordTap,
+      completeTap,
+      refetchGameStats,
+      refetchPoints,
+      onOpenDeposit,
+      scheduleSync,
+      onTapSuccess,
+      address,
+      isBanned,
+      referralBonusClaimed,
+      mustRestore,
+      isRestoring,
+      isRestoringFromServer,
+    ]
   );
 
-  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring || needsRestore || isRestoringFromServer;
+  const isDisabled = !isConnected || !hasBurner || localTaps <= 0 || isRestoring || mustRestore || isRestoringFromServer;
 
   return (
     <div className="flex flex-col items-center gap-6 w-full max-w-xl">
@@ -474,8 +521,10 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
               ? 'Restoring tap wallet...'
               : !isConnected
                 ? 'Connect your wallet'
-                : needsRestore
+                : shouldShowRestore
                   ? 'Tap wallet found on another device — restore it to enable taps'
+                  : mustRestore
+                    ? 'Tap wallet is registered on-chain but can’t be restored on this device'
                   : !hasBurner
                     ? 'Tap wallet not found on this device — open Deposit to create/sync it'
                     : localTaps <= 0
@@ -486,7 +535,7 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
 
       {/* Cross-device restore button */}
       <AnimatePresence>
-        {needsRestore && isConnected && (
+        {shouldShowRestore && isConnected && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -527,9 +576,45 @@ const TapArea: React.FC<TapAreaProps> = ({ onOpenDeposit, onTapSuccess }) => {
         )}
       </AnimatePresence>
 
+      {/* On-chain burner exists but restore is unavailable */}
+      <AnimatePresence>
+        {mustRestore && !shouldShowRestore && isConnected && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="flex flex-col items-center gap-2"
+          >
+            <p className="text-slate-600 text-sm text-center">
+              Tap wallet is registered on-chain, but this device doesn’t have the key.
+            </p>
+            {needsRestore && !serverMatchesOnChain ? (
+              <p className="text-slate-500 text-xs text-center px-4">
+                Restore is blocked: the server backup doesn’t match the on-chain tap wallet. Please contact support.
+              </p>
+            ) : (
+              <p className="text-slate-500 text-xs text-center px-4">
+                Restore is unavailable (no server backup). Use the device where you created the tap wallet, or contact
+                support.
+              </p>
+            )}
+            {normalizedOnChainBurner && normalizedOnChainBurner !== ZERO_ADDR && (
+              <p className="text-slate-400 text-xs font-mono break-all px-4">
+                {normalizedOnChainBurner}
+              </p>
+            )}
+            {needsRestore && serverBurnerAddress && !serverMatchesOnChain && (
+              <p className="text-slate-400 text-xs font-mono break-all px-4">
+                Server: {serverBurnerAddress}
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Existing user: sync local tap wallet to server for cross-device restore */}
       <AnimatePresence>
-        {needsServerSync && hasBurner && isConnected && !needsRestore && (
+        {(needsServerSync || shouldOfferServerSync) && hasBurner && isConnected && !mustRestore && !shouldShowRestore && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
