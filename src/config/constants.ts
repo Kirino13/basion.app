@@ -8,7 +8,7 @@ const rawChainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '8453');
 export const CHAIN_ID = Number.isNaN(rawChainId) ? 8453 : rawChainId;
 
 export const ADMIN_WALLET = (process.env.NEXT_PUBLIC_ADMIN_WALLET || '0x52a3435A247a42B37B7f35756fBB972455f0C645').toLowerCase();
-export const ENABLE_BUILDER_CODE = (process.env.NEXT_PUBLIC_ENABLE_BUILDER_CODE ?? 'false').toLowerCase() === 'true';
+export const ENABLE_BUILDER_CODE = (process.env.NEXT_PUBLIC_ENABLE_BUILDER_CODE ?? 'true').toLowerCase() === 'true';
 
 // Gas limit for taps - block taps when gas is above this threshold (in gwei)
 export const MAX_GAS_GWEI = 0.005;
