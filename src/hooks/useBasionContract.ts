@@ -2,8 +2,9 @@
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther } from 'viem';
-import { CONTRACT_ADDRESS, GAME_CONFIG } from '@/config/constants';
+import { CONTRACT_ADDRESS, ENABLE_BUILDER_CODE, GAME_CONFIG } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { BUILDER_CODE_SUFFIX } from '@/lib/builderCode';
 
 /**
  * Hook for interacting with the Basion smart contract.
@@ -61,6 +62,7 @@ export function useBasionContract() {
       functionName: 'deposit',
       args: [BigInt(packageId), referrerAddress || '0x0000000000000000000000000000000000000000'],
       value: parseEther(pkg.priceEth),
+      dataSuffix: ENABLE_BUILDER_CODE ? BUILDER_CODE_SUFFIX : undefined,
     });
   };
 
@@ -71,6 +73,7 @@ export function useBasionContract() {
       abi: BASION_ABI,
       functionName: 'registerBurner',
       args: [burnerAddress],
+      dataSuffix: ENABLE_BUILDER_CODE ? BUILDER_CODE_SUFFIX : undefined,
     });
   };
 

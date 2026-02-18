@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 import { useAccount, useSignMessage } from 'wagmi';
-import { RPC_URL, CONTRACT_ADDRESS, MAX_GAS_GWEI } from '@/config/constants';
+import { RPC_URL, CONTRACT_ADDRESS, ENABLE_BUILDER_CODE, MAX_GAS_GWEI } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { appendBuilderSuffix } from '@/lib/builderCode';
 
 // Safe localStorage helpers (handle private browsing mode, etc.)
 const safeLocalStorage = {
@@ -43,18 +44,28 @@ function getProvider(): ethers.JsonRpcProvider {
   return cachedProvider;
 }
 
-// Cached wallet and contract for fast taps - created once per burner
+const BASION_INTERFACE = new ethers.Interface(BASION_ABI);
+
+// Cached wallet for fast taps - created once per burner
 let cachedWallet: ethers.Wallet | null = null;
-let cachedContract: ethers.Contract | null = null;
 let cachedBurnerKey: string | null = null;
 
 // Nonce and gas management for parallel transactions
 let currentNonce: number | null = null;
 let cachedGasPrice: bigint | null = null;
 let gasPriceLastFetch: number = 0;
+let cachedTapGasLimit: bigint | null = null;
+const cachedBatchGasLimit = new Map<number, bigint>();
 const GAS_PRICE_CACHE_MS = 30000; // Cache gas price for 30 seconds
-const FIXED_GAS_LIMIT = 100000n; // Fixed gas limit for tap() - we know it uses ~50k
 const MAX_GAS_PRICE_WEI = BigInt(Math.round(MAX_GAS_GWEI * 1e9)); // 0.005 gwei -> 5,000,000 wei
+const GAS_BUFFER_NUMERATOR = 120n; // +20%
+const GAS_BUFFER_DENOMINATOR = 100n;
+const GAS_BUFFER_FLAT = 5000n;
+const FALLBACK_TAP_GAS_LIMIT = 140000n;
+
+function applyGasBuffer(estimate: bigint): bigint {
+  return (estimate * GAS_BUFFER_NUMERATOR) / GAS_BUFFER_DENOMINATOR + GAS_BUFFER_FLAT;
+}
 
 // Custom event for burner creation (cross-component sync)
 const BURNER_CREATED_EVENT = 'basion:burner-created';
@@ -563,7 +574,6 @@ export function useBurnerWallet() {
   }, [getBurner, mainWallet, registerBurnerWithBackend]);
 
   // Send tap transaction via burner wallet
-  // OPTIMIZED: All params explicit to avoid RPC calls - enables 1 tap/sec
   const sendTap = useCallback(async (): Promise<ethers.TransactionResponse> => {
     const burnerData = getBurner();
     if (!burnerData) {
@@ -572,51 +582,59 @@ export function useBurnerWallet() {
 
     const provider = getProvider();
 
-    // Cache wallet/contract (created once per burner)
-    if (cachedBurnerKey !== burnerData.privateKey || !cachedWallet || !cachedContract) {
+    // Cache wallet (created once per burner)
+    if (cachedBurnerKey !== burnerData.privateKey || !cachedWallet) {
       cachedWallet = new ethers.Wallet(burnerData.privateKey, provider);
-      cachedContract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, cachedWallet);
       cachedBurnerKey = burnerData.privateKey;
       currentNonce = null;
       cachedGasPrice = null;
+      cachedTapGasLimit = null;
+      cachedBatchGasLimit.clear();
     }
 
-    // TypeScript safety: after initialization above, these must exist.
-    // Capture them into local constants so nested helpers can rely on non-null values.
-    if (!cachedWallet || !cachedContract) {
+    if (!cachedWallet) {
       throw new Error('Failed to initialize tap wallet');
     }
     const wallet = cachedWallet;
-    const contract = cachedContract;
 
     const trySend = async (): Promise<ethers.TransactionResponse> => {
-      // Get nonce - fetch once from RPC, then increment locally
       if (currentNonce === null) {
         currentNonce = await provider.getTransactionCount(wallet.address, 'pending');
       }
 
-      // Get gas price - cache for 30 seconds to avoid RPC calls
       const now = Date.now();
       if (cachedGasPrice === null || now - gasPriceLastFetch > GAS_PRICE_CACHE_MS) {
-        // Use the same source as the "gas too high" gate: eth_gasPrice.
-        // This keeps behavior consistent with MAX_GAS_GWEI.
         const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
         cachedGasPrice = BigInt(gasPriceHex);
         gasPriceLastFetch = now;
       }
 
-      // Safety: enforce the 0.005 gwei rule at send-time too.
       if (cachedGasPrice > MAX_GAS_PRICE_WEI) {
         throw new Error('Gas too high');
       }
 
-      // IMPORTANT: only advance local nonce after the tx is successfully broadcast.
       const nonce = currentNonce;
+      const rawData = BASION_INTERFACE.encodeFunctionData('tap', []);
+      const data = ENABLE_BUILDER_CODE ? appendBuilderSuffix(rawData) : rawData;
 
-      // Send with ALL params explicit - NO additional RPC calls needed
-      const tx = await contract.tap({
+      let gasLimit = cachedTapGasLimit ?? FALLBACK_TAP_GAS_LIMIT;
+      try {
+        const estimated = await provider.estimateGas({
+          from: wallet.address,
+          to: CONTRACT_ADDRESS,
+          data,
+        });
+        gasLimit = applyGasBuffer(estimated);
+        cachedTapGasLimit = gasLimit;
+      } catch {
+        // Keep cached/fallback gas limit when estimate is temporarily unavailable.
+      }
+
+      const tx = await wallet.sendTransaction({
+        to: CONTRACT_ADDRESS,
+        data,
         nonce,
-        gasLimit: FIXED_GAS_LIMIT,
+        gasLimit,
         gasPrice: cachedGasPrice,
       });
 
@@ -642,8 +660,6 @@ export function useBurnerWallet() {
       }
       const m = (message || '').toLowerCase();
 
-      // If we failed to send, our local nonce/gas caches may be stale. Reset them.
-      // Retry ONCE for common transient errors.
       const shouldRetryOnce =
         !m.includes('insufficient funds') &&
         !m.includes('gas too high') &&
@@ -653,6 +669,8 @@ export function useBurnerWallet() {
           m.includes('replacement') ||
           m.includes('underpriced') ||
           m.includes('already known') ||
+          m.includes('intrinsic gas too low') ||
+          m.includes('out of gas') ||
           m.includes('timeout') ||
           m.includes('failed to fetch') ||
           m.includes('network') ||
@@ -661,19 +679,22 @@ export function useBurnerWallet() {
       if (shouldRetryOnce) {
         currentNonce = null;
         cachedGasPrice = null;
+        cachedTapGasLimit = null;
         try {
           return await trySend();
         } catch (err2) {
-          // Ensure next tap re-syncs with RPC
           currentNonce = null;
           cachedGasPrice = null;
+          cachedTapGasLimit = null;
           throw err2;
         }
       }
 
-      // Ensure next tap re-syncs with RPC for nonce-related failures
       if (m.includes('nonce') || (typeof code === 'string' && code === 'NONCE_EXPIRED')) {
         currentNonce = null;
+      }
+      if (m.includes('gas') || m.includes('intrinsic')) {
+        cachedTapGasLimit = null;
       }
 
       throw err;
@@ -693,23 +714,49 @@ export function useBurnerWallet() {
       }
 
       const provider = getProvider();
-      
-      const balance = await provider.getBalance(burnerData.address);
       const gasPriceHex = (await provider.send('eth_gasPrice', [])) as string;
       const gasPriceWei = BigInt(gasPriceHex);
-      const estimatedGas = BigInt(50000 + count * 5000);
-      const gasCost = estimatedGas * gasPriceWei;
-      
+      if (gasPriceWei > MAX_GAS_PRICE_WEI) {
+        throw new Error('Gas too high');
+      }
+
+      const wallet = new ethers.Wallet(burnerData.privateKey, provider);
+      const rawData = BASION_INTERFACE.encodeFunctionData('batchTap', [BigInt(count)]);
+      const data = ENABLE_BUILDER_CODE ? appendBuilderSuffix(rawData) : rawData;
+
+      let gasLimit = cachedBatchGasLimit.get(count) ?? applyGasBuffer(BigInt(50000 + count * 5000));
+      try {
+        const estimated = await provider.estimateGas({
+          from: wallet.address,
+          to: CONTRACT_ADDRESS,
+          data,
+        });
+        gasLimit = applyGasBuffer(estimated);
+        cachedBatchGasLimit.set(count, gasLimit);
+      } catch {
+        // Keep cached/fallback gas limit when estimate is temporarily unavailable.
+      }
+
+      const balance = await provider.getBalance(burnerData.address);
+      const gasCost = gasLimit * gasPriceWei;
       if (balance < gasCost) {
         throw new Error(`Insufficient gas for ${count} taps`);
       }
 
-      // Create wallet from private key and connect to provider
-      const wallet = new ethers.Wallet(burnerData.privateKey, provider);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, BASION_ABI, wallet);
-
-      const tx = await contract.batchTap(count);
-      return tx;
+      try {
+        return await wallet.sendTransaction({
+          to: CONTRACT_ADDRESS,
+          data,
+          gasLimit,
+          gasPrice: gasPriceWei,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message.toLowerCase() : String(err).toLowerCase();
+        if (message.includes('gas') || message.includes('intrinsic')) {
+          cachedBatchGasLimit.delete(count);
+        }
+        throw err;
+      }
     },
     [getBurner]
   );

@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Wallet, Zap, Check, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { parseEther } from 'viem';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { CONTRACT_ADDRESS, GAME_CONFIG, STORAGE_KEYS } from '@/config/constants';
+import { CONTRACT_ADDRESS, ENABLE_BUILDER_CODE, GAME_CONFIG, STORAGE_KEYS } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
 import { useBurnerWallet, useBasionContract } from '@/hooks';
+import { BUILDER_CODE_SUFFIX } from '@/lib/builderCode';
 import { getEthPrice, usdToEth } from '@/lib/price';
 
 interface DepositModalProps {
@@ -205,6 +206,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
       functionName: 'deposit',
       args: [BigInt(selectedPackage), referrer],
       value: parseEther(ethAmount),
+      dataSuffix: ENABLE_BUILDER_CODE ? BUILDER_CODE_SUFFIX : undefined,
     });
   }, [selectedPackage, ethAmount, writeContract, resetWrite]);
 
@@ -257,6 +259,7 @@ const DepositModal: React.FC<DepositModalProps> = ({ isOpen, onClose, onDepositS
           abi: BASION_ABI,
           functionName: 'registerBurner',
           args: [burner.address as `0x${string}`],
+          dataSuffix: ENABLE_BUILDER_CODE ? BUILDER_CODE_SUFFIX : undefined,
         });
       } else {
         // Burner already registered, go straight to deposit

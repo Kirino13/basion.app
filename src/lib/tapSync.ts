@@ -15,6 +15,7 @@ import { ethers } from 'ethers';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { CONTRACT_ADDRESS, RPC_URL } from '@/config/constants';
 import { BASION_ABI } from '@/config/abi';
+import { stripBuilderSuffix } from '@/lib/builderCode';
 
 // ---- Tap-like event topic0 hashes (computed once) ----
 const TOPIC_TAP = ethers.id('Tap(address,uint256,bool)');
@@ -111,11 +112,17 @@ export async function applyTapTxToDb(opts: ApplyTapOptions): Promise<ApplyTapRes
     try {
       const tx = await provider.getTransaction(normalizedTxHash);
       if (tx?.data) {
-        const selector = tx.data.slice(0, 10).toLowerCase();
+        const cleanData = stripBuilderSuffix(tx.data);
+        const selector = cleanData.slice(0, 10).toLowerCase();
         if (selector === BATCH_TAP_SELECTOR.toLowerCase()) {
-          // batchTap(uint256 count)
-          const decoded = ethers.AbiCoder.defaultAbiCoder().decode(['uint256'], '0x' + tx.data.slice(10));
-          tapCount = Math.max(1, Math.min(100, Number(decoded[0])));
+          // batchTap(uint256 count): selector(4) + first arg(32 bytes)
+          const firstArgHex = cleanData.slice(10, 74);
+          if (firstArgHex.length === 64) {
+            const decodedCount = Number(BigInt(`0x${firstArgHex}`));
+            tapCount = Math.max(1, Math.min(100, decodedCount));
+          } else {
+            tapCount = 1;
+          }
         }
         // else: tap() → tapCount = 1
       }
